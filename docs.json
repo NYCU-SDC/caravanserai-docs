@@ -3,10 +3,10 @@
   "theme": "aspen",
   "name": "Caravanserai",
   "logo": {
-    "light": "",
-    "dark": ""
+    "light": "https://openmoji.org/data/color/svg/1F3DD.svg",
+    "dark": "https://openmoji.org/data/color/svg/1F3DD.svg"
   },
-  "favicon": "",
+  "favicon": "https://openmoji.org/data/color/svg/1F3DD.svg",
   "colors": {
     "primary": "#7c7c7c",
     "light": "#0e0e0e",
