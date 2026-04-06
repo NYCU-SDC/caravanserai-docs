@@ -1,0 +1,271 @@
+---
+title: "Get project"
+description: "GET /api/v1/projects/{name}"
+---
+
+Returns a single project by name.
+
+```
+GET /api/v1/projects/{name}
+```
+
+## Path parameters
+
+<ParamField path="name" type="string" required>
+  The unique name of the project.
+</ParamField>
+
+## Response
+
+Returns a `Project` object with the full spec and status.
+
+<ResponseField name="apiVersion" type="string" required>
+  Always `"caravanserai/v1"`.
+</ResponseField>
+
+<ResponseField name="kind" type="string" required>
+  Always `"Project"`.
+</ResponseField>
+
+<ResponseField name="metadata" type="object" required>
+  <Expandable title="properties">
+    <ResponseField name="name" type="string" required>
+      Unique name of the project.
+    </ResponseField>
+
+    <ResponseField name="labels" type="object">
+      Arbitrary key/value string pairs.
+    </ResponseField>
+
+    <ResponseField name="annotations" type="object">
+      Non-identifying key/value metadata.
+    </ResponseField>
+
+    <ResponseField name="createdAt" type="string">
+      RFC 3339 timestamp set by the server on first write.
+    </ResponseField>
+
+    <ResponseField name="updatedAt" type="string">
+      RFC 3339 timestamp updated by the server on every write.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="spec" type="object">
+  Desired state declared by the user.
+
+  <Expandable title="properties">
+    <ResponseField name="services" type="object[]" required>
+      Ordered list of container definitions. Each service maps to one Docker container.
+
+      <Expandable title="services[]">
+        <ResponseField name="name" type="string" required>
+          Service name. Used as the DNS hostname inside the shared bridge network.
+        </ResponseField>
+
+        <ResponseField name="image" type="string" required>
+          Docker image reference, e.g. `"nginx:alpine"` or `"postgres:15"`.
+        </ResponseField>
+
+        <ResponseField name="env" type="object[]">
+          Environment variables injected into the container at runtime.
+
+          <Expandable title="env[]">
+            <ResponseField name="name" type="string" required>
+              Variable name.
+            </ResponseField>
+
+            <ResponseField name="value" type="string">
+              Variable value.
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+
+        <ResponseField name="volumeMounts" type="object[]">
+          Volumes to mount into this container.
+
+          <Expandable title="volumeMounts[]">
+            <ResponseField name="name" type="string" required>
+              Name of the volume defined in `spec.volumes`.
+            </ResponseField>
+
+            <ResponseField name="mountPath" type="string" required>
+              Absolute path inside the container where the volume is mounted.
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="volumes" type="object[]">
+      Named volumes shared across services.
+
+      <Expandable title="volumes[]">
+        <ResponseField name="name" type="string" required>
+          Volume name referenced by `volumeMounts[].name`.
+        </ResponseField>
+
+        <ResponseField name="type" type="string" required>
+          Volume lifecycle type. Currently only `Ephemeral` is supported — the volume is discarded when the project is stopped or moved.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="ingress" type="object[]">
+      HTTP ingress routing rules.
+
+      <Expandable title="ingress[]">
+        <ResponseField name="name" type="string" required>
+          Unique name for this ingress rule.
+        </ResponseField>
+
+        <ResponseField name="host" type="string">
+          Hostname for the ingress rule. If the value contains a dot it is used verbatim; otherwise the final hostname is assembled as `{host}.{environment}.{baseDomain}`.
+        </ResponseField>
+
+        <ResponseField name="target" type="object" required>
+          Backend service and port.
+
+          <Expandable title="properties">
+            <ResponseField name="service" type="string" required>
+              Name of the service to route traffic to.
+            </ResponseField>
+
+            <ResponseField name="port" type="integer" required>
+              Port on the target service.
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+
+        <ResponseField name="access" type="object">
+          Visibility and auth rules.
+
+          <Expandable title="properties">
+            <ResponseField name="scope" type="string" required>
+              Currently only `Internal` is supported — the route is exposed only on the Headscale overlay network.
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="expireAt" type="string">
+      RFC 3339 timestamp. When set, the GC controller deletes the project after this time. Useful for ephemeral preview environments.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="status" type="object">
+  Runtime state written by the controller manager and the agent.
+
+  <Expandable title="properties">
+    <ResponseField name="phase" type="string">
+      Current lifecycle phase: `Pending`, `Scheduled`, `Running`, `Failed`, `Terminating`, or `Terminated`.
+    </ResponseField>
+
+    <ResponseField name="nodeRef" type="string">
+      Name of the node assigned by the scheduler. Empty while `Pending`.
+    </ResponseField>
+
+    <ResponseField name="conditions" type="object[]">
+      Granular observable states.
+
+      <Expandable title="conditions[]">
+        <ResponseField name="type" type="string" required>
+          Machine-readable identifier. Common values: `Phase`, `TerminatingAt`, `NotReadyAt`.
+        </ResponseField>
+
+        <ResponseField name="status" type="string" required>
+          One of `True`, `False`, or `Unknown`.
+        </ResponseField>
+
+        <ResponseField name="reason" type="string">
+          CamelCase word summarising why the condition has this status (e.g. `"AgentReady"`, `"NodeNotReady"`).
+        </ResponseField>
+
+        <ResponseField name="message" type="string">
+          Human-readable explanation.
+        </ResponseField>
+
+        <ResponseField name="lastHeartbeatTime" type="string">
+          RFC 3339 timestamp of when this condition was last sampled.
+        </ResponseField>
+
+        <ResponseField name="lastTransitionTime" type="string">
+          RFC 3339 timestamp of when the status last changed.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash cURL
+curl http://localhost:8080/api/v1/projects/wordpress
+```
+
+```json 200 response
+{
+  "apiVersion": "caravanserai/v1",
+  "kind": "Project",
+  "metadata": {
+    "name": "wordpress",
+    "createdAt": "2025-04-06T09:00:00Z",
+    "updatedAt": "2025-04-06T09:00:10Z"
+  },
+  "spec": {
+    "services": [
+      {
+        "name": "db",
+        "image": "mysql:8",
+        "env": [
+          { "name": "MYSQL_ROOT_PASSWORD", "value": "secret" },
+          { "name": "MYSQL_DATABASE", "value": "wp" }
+        ],
+        "volumeMounts": [
+          { "name": "mysql-data", "mountPath": "/var/lib/mysql" }
+        ]
+      },
+      {
+        "name": "app",
+        "image": "wordpress:latest",
+        "env": [
+          { "name": "WORDPRESS_DB_HOST", "value": "db" },
+          { "name": "WORDPRESS_DB_PASSWORD", "value": "secret" },
+          { "name": "WORDPRESS_DB_NAME", "value": "wp" }
+        ]
+      }
+    ],
+    "volumes": [
+      { "name": "mysql-data", "type": "Ephemeral" }
+    ]
+  },
+  "status": {
+    "phase": "Running",
+    "nodeRef": "worker-01",
+    "conditions": [
+      {
+        "type": "Phase",
+        "status": "True",
+        "reason": "AgentReady",
+        "message": "All containers are running",
+        "lastTransitionTime": "2025-04-06T09:00:10Z"
+      }
+    ]
+  }
+}
+```
+
+```json 404 response
+{
+  "title": "Not Found",
+  "detail": "project not found: wordpress",
+  "status": 404,
+  "type": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
+}
+```
+
+</CodeGroup>

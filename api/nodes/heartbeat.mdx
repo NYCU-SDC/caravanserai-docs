@@ -1,0 +1,100 @@
+---
+title: "Node heartbeat"
+description: "POST /api/v1/nodes/{name}/heartbeat"
+---
+
+Reports liveness and current resource capacity for a node.
+
+```
+POST /api/v1/nodes/{name}/heartbeat
+```
+
+<Note>
+  `cara-agent` calls this endpoint on a configurable interval (default: every 30 seconds). You only need to call it directly if you are building a custom agent. The server merges the fields you send into the existing node status — any field you omit is left unchanged.
+</Note>
+
+## Path parameters
+
+<ParamField path="name" type="string" required>
+  The unique name of the node sending the heartbeat.
+</ParamField>
+
+## Request body
+
+The request body is optional. Sending an empty body (or omitting `Content-Length`) performs a pure timestamp update — `status.lastHeartbeat` is set to the current time and no other fields change.
+
+<ParamField body="state" type="string">
+  Updated health state. One of `Ready`, `NotReady`, or `Draining`. Omit to leave the current state unchanged.
+</ParamField>
+
+<ParamField body="network" type="object">
+  Overlay-network status. Omit to leave the current network fields unchanged.
+
+  <Expandable title="properties">
+    <ParamField body="ip" type="string">
+      Headscale-assigned overlay IP address (e.g. `"100.64.0.5"`).
+    </ParamField>
+
+    <ParamField body="dnsName" type="string">
+      MagicDNS FQDN for service discovery.
+    </ParamField>
+
+    <ParamField body="mode" type="string">
+      Connectivity mode: `Direct` (peer-to-peer path exists) or `DERP` (relayed via DERP server).
+    </ParamField>
+
+    <ParamField body="agentPort" type="integer">
+      TCP port the agent's HTTP server listens on. Used by `caractrl` to construct the agent address for port-forward tunnels.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="capacity" type="object">
+  Raw physical resource totals of the machine. Values use the same quantity format as Kubernetes: `"4000m"`, `"8Gi"`. Omit to leave unchanged.
+
+  Example: `{"cpu": "4000m", "memory": "8Gi"}`
+</ParamField>
+
+<ParamField body="allocatable" type="object">
+  Capacity minus system-reserved amounts. The scheduler subtracts running-project usage from this figure to compute available headroom. Omit to leave unchanged.
+
+  Example: `{"cpu": "3800m", "memory": "7Gi"}`
+</ParamField>
+
+## Response
+
+Returns `204 No Content` on success.
+
+Returns `404 Not Found` if the node does not exist.
+
+## Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST http://localhost:8080/api/v1/nodes/worker-01/heartbeat \
+  -H "Content-Type: application/json" \
+  -d '{
+    "state": "Ready",
+    "network": {
+      "ip": "100.64.0.5",
+      "dnsName": "worker-01.cluster.local",
+      "mode": "Direct",
+      "agentPort": 9090
+    },
+    "capacity": {
+      "cpu": "4000m",
+      "memory": "8Gi"
+    },
+    "allocatable": {
+      "cpu": "3800m",
+      "memory": "7Gi"
+    }
+  }'
+```
+
+```bash Timestamp-only heartbeat
+curl -X POST http://localhost:8080/api/v1/nodes/worker-01/heartbeat
+```
+
+</CodeGroup>

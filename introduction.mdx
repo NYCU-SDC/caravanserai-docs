@@ -1,0 +1,92 @@
+---
+title: "Introduction"
+description: "What Caravanserai is and how it works"
+---
+
+Caravanserai is a lightweight container orchestration system for self-hosted clusters. It schedules Docker workloads across a fleet of nodes through a central control plane — without requiring Kubernetes.
+
+## Architecture
+
+Caravanserai has three components: a control plane (`cara-server`), a per-node agent (`cara-agent`), and a CLI (`caractrl`). The control plane exposes an HTTP API. Agents connect to it, self-register, and poll for work. You interact with the system entirely through `caractrl`.
+
+```
+                      ┌─────────────────┐
+  caractrl ──────────▶│   cara-server   │◀── Scheduler / Controller Manager
+                      │  (control plane) │
+                      └────────┬────────┘
+                               │ HTTP API
+              ┌────────────────┼────────────────┐
+              ▼                ▼                ▼
+        ┌──────────┐    ┌──────────┐    ┌──────────┐
+        │cara-agent│    │cara-agent│    │cara-agent│
+        │  node-01 │    │  node-02 │    │  node-03 │
+        └────┬─────┘    └────┬─────┘    └────┬─────┘
+             │ Docker API    │               │
+          [containers]    [containers]    [containers]
+```
+
+<CardGroup cols={3}>
+  <Card title="cara-server" icon="server">
+    The control-plane API server and controller manager. Accepts manifests, runs the scheduler, and exposes the REST API under `/api/v1/`.
+  </Card>
+  <Card title="cara-agent" icon="circle-nodes">
+    Runs on every worker node. Self-registers with `cara-server`, heartbeats regularly, and reconciles containers via the Docker daemon.
+  </Card>
+  <Card title="caractrl" icon="terminal">
+    The command-line client. Sends API requests to `cara-server` on your behalf. Supports `apply`, `get`, `delete`, `port-forward`, and `version`.
+  </Card>
+</CardGroup>
+
+## Key concepts
+
+### Node
+
+A node is a physical or virtual machine running `cara-agent`. Nodes self-register with the control plane on startup. The scheduler only assigns work to nodes in the `Ready` state.
+
+| State | Meaning |
+|-------|---------|
+| `Ready` | Node is healthy and accepts new projects |
+| `NotReady` | Node has missed heartbeats; excluded from scheduling |
+| `Draining` | Node is being wound down; no new projects are assigned |
+
+### Project
+
+A project is a workload definition — a set of containers (services) that must be co-located on a single node. Services share a Docker bridge network and resolve each other by service name, exactly like Docker Compose.
+
+### Scheduling lifecycle
+
+Every project moves through a defined set of phases from submission to termination.
+
+```
+Pending ──(scheduler)──▶ Scheduled ──(agent)──▶ Running
+                                                    │
+                                               (error) ▼
+                                                  Failed
+```
+
+| Phase | Set by | Meaning |
+|-------|--------|---------|
+| `Pending` | Server | Accepted; awaiting the scheduler |
+| `Scheduled` | Scheduler | Node assigned; agent not yet confirmed |
+| `Running` | Agent | All containers are up |
+| `Failed` | Agent | Terminal error — inspect Conditions for details |
+| `Terminating` | Server | Deletion is in progress |
+| `Terminated` | Agent | All containers have been removed |
+
+## When to use Caravanserai vs Kubernetes
+
+Use Caravanserai when you want to orchestrate Docker workloads across a small self-hosted cluster without the operational overhead of Kubernetes. It is a good fit for:
+
+- Homelabs and edge deployments with a handful of nodes
+- Teams already familiar with Docker Compose who want multi-node scheduling
+- Environments where Kubernetes' resource requirements are prohibitive
+
+Choose Kubernetes when you need advanced features such as rolling updates, horizontal pod autoscaling, RBAC, or a large ecosystem of operators.
+
+## Prerequisites
+
+Before you install Caravanserai, make sure the following are available on your machine:
+
+- **Go 1.22+** — required to build the binaries from source
+- **Docker** — the agent reconciles containers through the Docker daemon (`unix:///var/run/docker.sock` or via `DOCKER_HOST`)
+- **PostgreSQL** — required by `cara-server` to persist cluster state (connection passed via `DATABASE_URL`)

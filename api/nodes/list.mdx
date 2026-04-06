@@ -1,0 +1,233 @@
+---
+title: "List nodes"
+description: "GET /api/v1/nodes"
+---
+
+Returns all registered nodes.
+
+```
+GET /api/v1/nodes
+```
+
+## Query parameters
+
+This endpoint has no query parameters.
+
+## Response
+
+Returns a `NodeList` object.
+
+<ResponseField name="apiVersion" type="string" required>
+  Always `"caravanserai/v1"`.
+</ResponseField>
+
+<ResponseField name="kind" type="string" required>
+  Always `"NodeList"`.
+</ResponseField>
+
+<ResponseField name="items" type="object[]" required>
+  Array of Node objects. Empty when no nodes are registered.
+
+  <Expandable title="items[]">
+    <ResponseField name="apiVersion" type="string">
+      Always `"caravanserai/v1"`.
+    </ResponseField>
+
+    <ResponseField name="kind" type="string">
+      Always `"Node"`.
+    </ResponseField>
+
+    <ResponseField name="metadata" type="object">
+      <Expandable title="properties">
+        <ResponseField name="name" type="string" required>
+          Unique name of the node within the cluster.
+        </ResponseField>
+
+        <ResponseField name="labels" type="object">
+          Arbitrary key/value string pairs used for selection and grouping.
+        </ResponseField>
+
+        <ResponseField name="annotations" type="object">
+          Non-identifying key/value metadata (e.g. human-readable hints).
+        </ResponseField>
+
+        <ResponseField name="createdAt" type="string">
+          RFC 3339 timestamp set by the server on first write.
+        </ResponseField>
+
+        <ResponseField name="updatedAt" type="string">
+          RFC 3339 timestamp updated by the server on every write.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="spec" type="object">
+      Administrator-declared configuration of the node.
+
+      <Expandable title="properties">
+        <ResponseField name="hostname" type="string">
+          OS-level hostname of the machine.
+        </ResponseField>
+
+        <ResponseField name="unschedulable" type="boolean">
+          When `true`, the scheduler will not assign new projects to this node.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="status" type="object">
+      Runtime state reported by the agent and computed by the controller manager.
+
+      <Expandable title="properties">
+        <ResponseField name="state" type="string">
+          High-level health summary. One of `Ready`, `NotReady`, or `Draining`.
+        </ResponseField>
+
+        <ResponseField name="lastHeartbeat" type="string">
+          RFC 3339 timestamp of the most recent heartbeat received from the agent.
+        </ResponseField>
+
+        <ResponseField name="network" type="object">
+          Overlay-network connectivity details.
+
+          <Expandable title="properties">
+            <ResponseField name="ip" type="string">
+              Headscale-assigned overlay IP address (e.g. `"100.64.0.5"`).
+            </ResponseField>
+
+            <ResponseField name="dnsName" type="string">
+              MagicDNS FQDN for service discovery.
+            </ResponseField>
+
+            <ResponseField name="mode" type="string">
+              Connectivity mode: `Direct` (peer-to-peer path) or `DERP` (relayed).
+            </ResponseField>
+
+            <ResponseField name="agentPort" type="integer">
+              TCP port the agent's HTTP server listens on.
+            </ResponseField>
+
+            <ResponseField name="throughput" type="object">
+              Last measured upload/download speeds.
+
+              <Expandable title="properties">
+                <ResponseField name="download" type="string">
+                  Download speed string (e.g. `"500Mbps"`).
+                </ResponseField>
+
+                <ResponseField name="upload" type="string">
+                  Upload speed string (e.g. `"100Mbps"`).
+                </ResponseField>
+
+                <ResponseField name="lastTestTime" type="string">
+                  RFC 3339 timestamp of the most recent throughput measurement.
+                </ResponseField>
+              </Expandable>
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+
+        <ResponseField name="capacity" type="object">
+          Raw physical resource totals reported by the agent (e.g. `{"cpu": "4000m", "memory": "8Gi"}`).
+        </ResponseField>
+
+        <ResponseField name="allocatable" type="object">
+          Capacity minus system-reserved amounts. The scheduler uses this to compute available headroom.
+        </ResponseField>
+
+        <ResponseField name="conditions" type="object[]">
+          List of observable node conditions.
+
+          <Expandable title="conditions[]">
+            <ResponseField name="type" type="string" required>
+              Machine-readable identifier, e.g. `"Ready"`.
+            </ResponseField>
+
+            <ResponseField name="status" type="string" required>
+              One of `True`, `False`, or `Unknown`.
+            </ResponseField>
+
+            <ResponseField name="reason" type="string">
+              CamelCase word summarising why the condition has this status.
+            </ResponseField>
+
+            <ResponseField name="message" type="string">
+              Human-readable explanation.
+            </ResponseField>
+
+            <ResponseField name="lastHeartbeatTime" type="string">
+              RFC 3339 timestamp of when this condition was last sampled.
+            </ResponseField>
+
+            <ResponseField name="lastTransitionTime" type="string">
+              RFC 3339 timestamp of when the status last changed.
+            </ResponseField>
+          </Expandable>
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example
+
+<CodeGroup>
+
+```bash cURL
+curl http://localhost:8080/api/v1/nodes
+```
+
+```json Response
+{
+  "apiVersion": "caravanserai/v1",
+  "kind": "NodeList",
+  "items": [
+    {
+      "apiVersion": "caravanserai/v1",
+      "kind": "Node",
+      "metadata": {
+        "name": "worker-01",
+        "labels": {
+          "zone": "hsinchu"
+        },
+        "createdAt": "2025-04-01T08:00:00Z",
+        "updatedAt": "2025-04-06T12:34:56Z"
+      },
+      "spec": {
+        "hostname": "worker-01.local",
+        "unschedulable": false
+      },
+      "status": {
+        "state": "Ready",
+        "lastHeartbeat": "2025-04-06T12:34:56Z",
+        "network": {
+          "ip": "100.64.0.5",
+          "dnsName": "worker-01.cluster.local",
+          "mode": "Direct",
+          "agentPort": 9090
+        },
+        "capacity": {
+          "cpu": "4000m",
+          "memory": "8Gi"
+        },
+        "allocatable": {
+          "cpu": "3800m",
+          "memory": "7Gi"
+        },
+        "conditions": [
+          {
+            "type": "Ready",
+            "status": "True",
+            "reason": "AgentReady",
+            "message": "Heartbeat received within threshold",
+            "lastHeartbeatTime": "2025-04-06T12:34:56Z",
+            "lastTransitionTime": "2025-04-01T08:00:00Z"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+</CodeGroup>

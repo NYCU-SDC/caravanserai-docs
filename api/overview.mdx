@@ -1,0 +1,60 @@
+---
+title: "API Overview"
+description: "HTTP API reference for the Caravanserai control plane"
+---
+
+The Caravanserai control plane exposes a JSON REST API served by `cara-server`.
+
+## Base URL
+
+```
+http://<cara-server-host>:8080/api/v1
+```
+
+Replace `<cara-server-host>` with the hostname or IP address of the machine running `cara-server`. The default port is `8080`.
+
+## Request format
+
+For endpoints that accept a body (`POST`, `PATCH`), set the `Content-Type` header:
+
+```
+Content-Type: application/json
+```
+
+## Response format
+
+All responses — including errors — are JSON.
+
+## Error format
+
+Errors follow [RFC 7807](https://www.rfc-editor.org/rfc/rfc7807) (`application/problem+json`) and always include `title` and `detail` fields:
+
+```json
+{
+  "title": "Not Found",
+  "detail": "node not found: worker-01",
+  "status": 404,
+  "type": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
+}
+```
+
+## HTTP status codes
+
+| Code | Meaning |
+|------|---------|
+| `200 OK` | Request succeeded |
+| `201 Created` | Resource was created successfully |
+| `202 Accepted` | Request accepted; processing continues asynchronously |
+| `204 No Content` | Request succeeded; no response body |
+| `400 Bad Request` | Invalid input — check the `detail` field for specifics |
+| `404 Not Found` | Resource does not exist |
+| `409 Conflict` | Resource already exists or has blocking dependents |
+| `500 Internal Server Error` | Unexpected server-side failure |
+
+## Resources
+
+The API exposes two top-level resource kinds.
+
+**[Nodes](/api/nodes/list)** — physical or virtual machines running `cara-agent`. Nodes self-register on startup and send periodic heartbeats to report liveness and capacity. The scheduler only assigns work to nodes whose state is `Ready`.
+
+**[Projects](/api/projects/list)** — workload definitions composed of one or more containers (services) that must run co-located on a single node. Services share a Docker bridge network and resolve each other by service name.

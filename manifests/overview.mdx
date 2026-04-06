@@ -1,0 +1,126 @@
+---
+title: "Manifests"
+description: "Declare resources using YAML manifests"
+---
+
+A manifest is a YAML (or JSON) file that describes the desired state of a Caravanserai resource. The API follows the same structure as Kubernetes: every manifest has a `apiVersion`, a `kind`, a `metadata` block, and a `spec` block.
+
+When you apply a manifest, Caravanserai stores the desired state and reconciles it continuously until the cluster matches what you declared.
+
+## Structure
+
+Every manifest shares a common top-level shape:
+
+```yaml manifest.yaml
+apiVersion: caravanserai/v1
+kind: <Kind>
+metadata:
+  name: <name>
+  labels:
+    <key>: <value>
+spec:
+  # resource-specific fields
+```
+
+### Common fields
+
+**TypeMeta** — present in every resource:
+
+| Field | Value |
+|---|---|
+| `apiVersion` | Always `caravanserai/v1` |
+| `kind` | `Node` or `Project` |
+
+**ObjectMeta** — identity and classification:
+
+| Field | Type | Description |
+|---|---|---|
+| `metadata.name` | string | Unique identifier within the resource kind. Required. |
+| `metadata.labels` | map | Arbitrary key/value pairs for selection and grouping. Optional. |
+
+## Supported kinds
+
+<CardGroup cols={2}>
+  <Card title="Node" icon="server" href="/manifests/node">
+    Register and configure a physical or virtual machine in your cluster.
+  </Card>
+  <Card title="Project" icon="box" href="/manifests/project">
+    Define one or more containers (services) to run as a co-located workload.
+  </Card>
+</CardGroup>
+
+## Applying manifests
+
+Use `caractrl apply` to create or update a resource from a manifest file.
+
+<Steps>
+  <Step title="Write your manifest">
+    Save your manifest to a file, for example `manifest.yaml`.
+  </Step>
+  <Step title="Apply the manifest">
+    Pass the file path with the `-f` flag:
+
+    ```bash
+    caractrl apply -f manifest.yaml
+    ```
+
+    You can also pipe a manifest from stdin:
+
+    ```bash
+    cat manifest.yaml | caractrl apply -f -
+    ```
+  </Step>
+  <Step title="Verify the result">
+    Check the resource state after applying:
+
+    ```bash
+    # List all projects
+    caractrl get projects
+
+    # List all nodes
+    caractrl get nodes
+    ```
+  </Step>
+</Steps>
+
+## Format support
+
+`caractrl apply` accepts both YAML and JSON manifests. The following two manifests are equivalent:
+
+<Tabs>
+  <Tab title="YAML">
+    ```yaml manifest.yaml
+    apiVersion: caravanserai/v1
+    kind: Project
+    metadata:
+      name: nginx-demo
+    spec:
+      services:
+        - name: web
+          image: nginx:alpine
+    ```
+  </Tab>
+  <Tab title="JSON">
+    ```json manifest.json
+    {
+      "apiVersion": "caravanserai/v1",
+      "kind": "Project",
+      "metadata": {
+        "name": "nginx-demo"
+      },
+      "spec": {
+        "services": [
+          {
+            "name": "web",
+            "image": "nginx:alpine"
+          }
+        ]
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<Note>
+  The `status` block is read-only and set by the system. You do not need to include it in your manifests — Caravanserai ignores any `status` fields you submit.
+</Note>

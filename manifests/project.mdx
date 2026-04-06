@@ -1,0 +1,232 @@
+---
+title: "Project Manifest"
+description: "Define container workloads with Project manifests"
+---
+
+A Project is the central workload resource in Caravanserai. It groups one or more containers — called services — that must run together on a single node. Services share a Docker bridge network and resolve each other by service name, exactly like Docker Compose.
+
+## Schema
+
+### Top-level fields
+
+<ParamField path="apiVersion" type="string" required>
+  Must be `caravanserai/v1`.
+</ParamField>
+
+<ParamField path="kind" type="string" required>
+  Must be `Project`.
+</ParamField>
+
+<ParamField path="metadata" type="object" required>
+  Identity metadata for the resource.
+</ParamField>
+
+<ParamField path="metadata.name" type="string" required>
+  Unique name for the Project within the cluster. Used to reference the Project in `caractrl` commands and as the basis for Docker resource names (`cara-{name}` for the network, `{name}-{service}` for containers).
+</ParamField>
+
+<ParamField path="metadata.labels" type="object">
+  Arbitrary key/value pairs for grouping and selection.
+</ParamField>
+
+<ParamField path="spec" type="object" required>
+  The desired state of the Project.
+</ParamField>
+
+### spec.services
+
+The ordered list of containers to run. At least one service is required.
+
+<ParamField path="spec.services" type="ServiceDef[]" required>
+  One or more service definitions.
+</ParamField>
+
+<ParamField path="spec.services[].name" type="string" required>
+  Name of the service within the Project. This name is used as the DNS hostname inside the shared bridge network — other services can reach this container at `http://{name}:{port}`.
+</ParamField>
+
+<ParamField path="spec.services[].image" type="string" required>
+  Docker image reference, for example `nginx:alpine` or `postgres:15`.
+</ParamField>
+
+<ParamField path="spec.services[].env" type="EnvVar[]">
+  Environment variables injected into the container at runtime.
+</ParamField>
+
+<ParamField path="spec.services[].env[].name" type="string" required>
+  Environment variable name, for example `DATABASE_URL`.
+</ParamField>
+
+<ParamField path="spec.services[].env[].value" type="string">
+  Environment variable value.
+</ParamField>
+
+<ParamField path="spec.services[].volumeMounts" type="VolumeMount[]">
+  Volumes to attach to this container. Each entry must reference a volume defined in `spec.volumes`.
+</ParamField>
+
+<ParamField path="spec.services[].volumeMounts[].name" type="string" required>
+  Name of the volume to mount. Must match a name in `spec.volumes`.
+</ParamField>
+
+<ParamField path="spec.services[].volumeMounts[].mountPath" type="string" required>
+  Absolute path inside the container where the volume is mounted, for example `/var/lib/mysql`.
+</ParamField>
+
+### spec.volumes
+
+<ParamField path="spec.volumes" type="VolumeDef[]">
+  Named volumes shared across services. Optional.
+</ParamField>
+
+<ParamField path="spec.volumes[].name" type="string" required>
+  Volume name. Referenced by `spec.services[].volumeMounts[].name`.
+</ParamField>
+
+<ParamField path="spec.volumes[].type" type="string" required default="Ephemeral">
+  Volume lifecycle type. Currently the only supported value is `Ephemeral`: the volume is discarded when the Project is stopped or moved to another node. No backup or restore occurs.
+</ParamField>
+
+### spec.ingress
+
+<ParamField path="spec.ingress" type="IngressDef[]">
+  HTTP routing rules for exposing services. Optional.
+</ParamField>
+
+<ParamField path="spec.ingress[].name" type="string" required>
+  Identifier for this ingress rule.
+</ParamField>
+
+<ParamField path="spec.ingress[].host" type="string">
+  Hostname for the ingress rule. If the value contains a dot it is used verbatim; otherwise the final hostname is assembled as `{host}.{environment}.{baseDomain}`.
+</ParamField>
+
+<ParamField path="spec.ingress[].target" type="object" required>
+  The backend service and port to forward traffic to.
+</ParamField>
+
+<ParamField path="spec.ingress[].target.service" type="string" required>
+  Name of the service (must match a name in `spec.services`) to route traffic to.
+</ParamField>
+
+<ParamField path="spec.ingress[].target.port" type="integer" required>
+  Port on the target service to forward traffic to.
+</ParamField>
+
+<ParamField path="spec.ingress[].access" type="object">
+  Visibility settings for the ingress endpoint.
+</ParamField>
+
+<ParamField path="spec.ingress[].access.scope" type="string" required default="Internal">
+  Controls where the route is reachable. Currently the only supported value is `Internal`, which limits access to the Headscale overlay network.
+</ParamField>
+
+### spec.expireAt
+
+<ParamField path="spec.expireAt" type="string">
+  An RFC 3339 timestamp. When set, the garbage collection controller automatically deletes the Project after this time. Useful for ephemeral preview environments. Example: `2026-04-30T00:00:00Z`.
+</ParamField>
+
+---
+
+## Examples
+
+<Tabs>
+  <Tab title="Minimal (nginx)">
+    A single-service Project running an nginx web server. No volumes or ingress required.
+
+    ```yaml nginx-project.yaml
+    apiVersion: caravanserai/v1
+    kind: Project
+    metadata:
+      name: nginx-demo
+    spec:
+      services:
+        - name: web
+          image: nginx:alpine
+    ```
+  </Tab>
+  <Tab title="Multi-service with volumes (WordPress)">
+    Two services sharing an ephemeral volume. The `app` service connects to `db` using the service name as the hostname — Caravanserai resolves it via the shared bridge network.
+
+    ```yaml multi-service.yaml
+    apiVersion: caravanserai/v1
+    kind: Project
+    metadata:
+      name: wordpress
+    spec:
+      services:
+        - name: db
+          image: mysql:8
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "secret"
+            - name: MYSQL_DATABASE
+              value: "wp"
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+        - name: app
+          image: wordpress:latest
+          env:
+            - name: WORDPRESS_DB_HOST
+              value: db
+            - name: WORDPRESS_DB_PASSWORD
+              value: "secret"
+            - name: WORDPRESS_DB_NAME
+              value: "wp"
+      volumes:
+        - name: mysql-data
+          type: Ephemeral
+    ```
+  </Tab>
+  <Tab title="Project with ingress">
+    A web application exposed internally via the overlay network on a custom hostname.
+
+    ```yaml ingress-project.yaml
+    apiVersion: caravanserai/v1
+    kind: Project
+    metadata:
+      name: my-app
+      labels:
+        team: platform
+    spec:
+      services:
+        - name: web
+          image: my-org/my-app:latest
+          env:
+            - name: PORT
+              value: "3000"
+      ingress:
+        - name: web-internal
+          host: my-app
+          target:
+            service: web
+            port: 3000
+          access:
+            scope: Internal
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Validation
+
+Caravanserai validates your manifest when you run `caractrl apply`. The following fields are required:
+
+- `apiVersion`
+- `kind`
+- `metadata.name`
+- `spec.services` (at least one entry)
+- `spec.services[].name` and `spec.services[].image` on each service
+- `spec.volumes[].name` and `spec.volumes[].type` on each volume
+- `spec.ingress[].name`, `spec.ingress[].target.service`, and `spec.ingress[].target.port` on each ingress rule
+
+<Warning>
+  If you define a `volumeMount` in a service, the referenced volume name must exist in `spec.volumes`. The API rejects manifests with dangling volume references.
+</Warning>
+
+<Note>
+  Service names resolve as hostnames within the Project's Docker bridge network. Use the service name directly as the hostname when configuring inter-service connections — for example, `WORDPRESS_DB_HOST: db` connects the `app` service to the `db` service.
+</Note>

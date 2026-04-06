@@ -1,0 +1,235 @@
+---
+title: "caractrl"
+description: "Configure the Caravanserai CLI"
+---
+
+`caractrl` is the command-line interface for Caravanserai. Use it to inspect nodes, manage projects, apply manifests, and forward ports from a running container to your local machine.
+
+## Global flags
+
+Global flags control how `caractrl` connects to `cara-server` and formats its output. They must appear **before** the subcommand:
+
+```bash
+./bin/caractrl [--server <url>] [--output <format>] <subcommand>
+```
+
+<ParamField path="--server" type="string" default="http://localhost:8080">
+  URL of the `cara-server` control plane. Override this when `cara-server` is not running on localhost.
+</ParamField>
+
+<ParamField path="--output" type="string" default="table">
+  Output format for command results. Accepted values: `table`, `json`, `yaml`.
+</ParamField>
+
+<Tip>
+  Use `--output json` when you want to pipe `caractrl` output into tools like `jq` for scripting or automation:
+
+  ```bash
+  ./bin/caractrl --output json get projects | jq '.[] | select(.status.phase == "Running")'
+  ```
+</Tip>
+
+## Output format examples
+
+<Tabs>
+  <Tab title="table (default)">
+    ```bash
+    ./bin/caractrl get projects
+    # NAME         PHASE     NODE       CONDITIONS          AGE
+    # nginx-demo   Running   worker-01  ContainersRunning   5m
+    ```
+  </Tab>
+  <Tab title="json">
+    ```bash
+    ./bin/caractrl --output json get projects nginx-demo
+    # {
+    #   "metadata": { "name": "nginx-demo" },
+    #   "status": { "phase": "Running", "nodeRef": "worker-01" }
+    # }
+    ```
+  </Tab>
+  <Tab title="yaml">
+    ```bash
+    ./bin/caractrl --output yaml get projects nginx-demo
+    # metadata:
+    #   name: nginx-demo
+    # status:
+    #   phase: Running
+    #   nodeRef: worker-01
+    ```
+  </Tab>
+</Tabs>
+
+## Subcommands
+
+### version
+
+Print the build version, commit hash, and build timestamp.
+
+```bash
+./bin/caractrl version
+# caractrl v0.1.0 (commit abc1234, built 2025-01-01T00:00:00Z)
+```
+
+---
+
+### get nodes
+
+List all nodes or inspect a single node.
+
+```bash
+./bin/caractrl get nodes [<name>]
+```
+
+**Examples**
+
+```bash
+# List all nodes
+./bin/caractrl get nodes
+
+# Inspect a single node
+./bin/caractrl get nodes worker-01
+
+# Get a single node as JSON
+./bin/caractrl --output json get nodes worker-01
+```
+
+---
+
+### get projects
+
+List all projects or inspect a single project. Filter the list by lifecycle phase with `--phase`.
+
+```bash
+./bin/caractrl get projects [<name>] [--phase <phase>]
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--phase` | Filter by phase: `Pending`, `Scheduled`, `Running`, `Failed`, `Terminating` |
+
+**Examples**
+
+```bash
+# List all projects
+./bin/caractrl get projects
+
+# List only running projects
+./bin/caractrl get projects --phase Running
+
+# Inspect a single project
+./bin/caractrl get projects nginx-demo
+
+# Inspect a single project as JSON
+./bin/caractrl --output json get projects nginx-demo
+```
+
+---
+
+### apply
+
+Create or update a resource from a YAML or JSON manifest. The `kind` field in the manifest determines which resource type is applied. Supported kinds: `Node`, `Project`.
+
+```bash
+./bin/caractrl apply -f <file>
+./bin/caractrl apply -f -      # read from stdin
+```
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `-f, --filename` | Path to the manifest file, or `-` to read from stdin. Required. |
+
+**Examples**
+
+```bash
+# Apply a project manifest
+./bin/caractrl apply -f examples/nginx-project.yaml
+# project/nginx-demo created
+
+# Apply a node manifest
+./bin/caractrl apply -f node.yaml
+# node/edge-node-01 created
+
+# Apply from stdin
+cat project.yaml | ./bin/caractrl apply -f -
+```
+
+---
+
+### delete node
+
+Remove a node from the control plane by name.
+
+```bash
+./bin/caractrl delete node <name>
+```
+
+**Example**
+
+```bash
+./bin/caractrl delete node worker-03
+# node "worker-03" deleted
+```
+
+---
+
+### delete project
+
+Delete a project by name. The agent on the assigned node tears down all containers belonging to the project. If deletion is already in progress, the command reports that the project is being deleted.
+
+```bash
+./bin/caractrl delete project <name>
+```
+
+**Example**
+
+```bash
+./bin/caractrl delete project nginx-demo
+# project "nginx-demo" deleted
+```
+
+---
+
+### port-forward
+
+Forward a local TCP port to a container port on a remote node via the agent's WebSocket tunnel. This works similarly to `kubectl port-forward`.
+
+```bash
+./bin/caractrl port-forward <project>/<service> [LOCAL_PORT:]REMOTE_PORT [--node <host:port>]
+```
+
+**Arguments**
+
+| Argument | Description |
+|----------|-------------|
+| `<project>/<service>` | Target project and service name, separated by `/`. |
+| `[LOCAL_PORT:]REMOTE_PORT` | Port mapping. Omit `LOCAL_PORT` to use the same port number locally and remotely. |
+
+**Flags**
+
+| Flag | Description |
+|------|-------------|
+| `--node` | Agent address (`host:port`). When omitted, `caractrl` resolves the agent address automatically from `cara-server` using the project's `nodeRef`. |
+
+**Examples**
+
+```bash
+# Forward local port 5432 to the "db" service's port 5432 in project "my-app"
+./bin/caractrl port-forward my-app/db 5432
+
+# Forward local port 15432 to remote port 5432
+./bin/caractrl port-forward my-app/db 15432:5432
+
+# Specify the agent address explicitly
+./bin/caractrl port-forward my-app/db 5432 --node 192.168.1.100:9090
+```
+
+Press `Ctrl+C` to stop forwarding and close the tunnel.
+
+<Note>
+  Automatic agent resolution requires the project to be in `Running` or `Scheduled` phase so that a `nodeRef` is set. If the project has not been scheduled yet, use `--node` to specify the agent address directly.
+</Note>

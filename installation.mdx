@@ -1,0 +1,122 @@
+---
+title: "Installation"
+description: "Build and install Caravanserai binaries"
+---
+
+Caravanserai is distributed as source code. You build the three binaries yourself using the Go toolchain.
+
+## Prerequisites
+
+Before you build, ensure the following are installed and accessible on your `PATH`:
+
+- **Go 1.22 or later** — `go version` should report `go1.22` or higher
+- **Docker** — the Docker daemon must be running; the agent connects to `unix:///var/run/docker.sock` by default
+- **PostgreSQL 16** — required by `cara-server`; you can run it locally with Docker
+- **Make** — used to invoke the build targets in the `Makefile`
+
+## Build from source
+
+Clone the repository, then run `make build` from the project root:
+
+```bash
+git clone https://github.com/NYCU-SDC/caravanserai.git
+cd caravanserai
+make build
+```
+
+`make build` compiles all three binaries and places them in `bin/`:
+
+```
+bin/cara-server
+bin/cara-agent
+bin/caractrl
+```
+
+To build a single binary, target its subdirectory directly:
+
+```bash
+make -C cmd/cara-server build
+make -C cmd/cara-agent  build
+make -C cmd/caractrl    build
+```
+
+<Tip>
+  Verify your installation by running `./bin/caractrl version`. A successful output confirms the binary is built and executable.
+</Tip>
+
+## What each binary does
+
+<CardGroup cols={3}>
+  <Card title="cara-server" icon="server">
+    The control-plane API server and controller manager. Accepts project manifests, runs the scheduler, and exposes a REST API at `/api/v1/`. Requires PostgreSQL.
+  </Card>
+  <Card title="cara-agent" icon="circle-nodes">
+    The per-node reconciler. Registers with `cara-server`, sends periodic heartbeats, and creates or removes Docker containers to match the desired state.
+  </Card>
+  <Card title="caractrl" icon="terminal">
+    The command-line client. Sends requests to `cara-server`. Supports `apply`, `get`, `delete`, `port-forward`, and `version` subcommands.
+  </Card>
+</CardGroup>
+
+## Environment configuration
+
+Each component is configured through environment variables (or a `config.yaml` / `.env` file in the working directory). Environment variables take precedence.
+
+<Tabs>
+  <Tab title="cara-server">
+    | Variable | Default | Description |
+    |----------|---------|-------------|
+    | `DATABASE_URL` | _(required)_ | PostgreSQL DSN, e.g. `postgresql://user:pass@host:5432/db?sslmode=disable` |
+    | `HOST` | `0.0.0.0` | Address the server listens on |
+    | `PORT` | `8080` | Port the server listens on |
+    | `DEBUG` | `false` | Enable verbose debug logging |
+    | `OTEL_COLLECTOR_URL` | _(optional)_ | OTLP gRPC endpoint for OpenTelemetry traces |
+
+    Minimal startup example:
+
+    ```bash
+    DATABASE_URL="postgresql://postgres:password@localhost:5432/caravanserai?sslmode=disable" \
+      ./bin/cara-server
+    # Listening on 0.0.0.0:8080
+    ```
+  </Tab>
+  <Tab title="cara-agent">
+    | Variable | Default | Description |
+    |----------|---------|-------------|
+    | `SERVER_URL` | `http://localhost:8080` | Address of `cara-server` |
+    | `NODE_NAME` | OS hostname | Name the node registers under |
+    | `HEARTBEAT_INTERVAL` | `30s` | How often the agent sends a heartbeat |
+    | `DOCKER_HOST` | `unix:///var/run/docker.sock` | Docker daemon endpoint |
+    | `DEBUG` | `false` | Enable verbose debug logging |
+
+    Minimal startup example:
+
+    ```bash
+    SERVER_URL=http://localhost:8080 \
+    NODE_NAME=my-node \
+      ./bin/cara-agent
+    ```
+  </Tab>
+  <Tab title="caractrl">
+    `caractrl` accepts flags **before** the subcommand:
+
+    ```bash
+    ./bin/caractrl [--server <url>] [--output <format>] <command>
+    ```
+
+    | Flag | Default | Description |
+    |------|---------|-------------|
+    | `--server` | `http://localhost:8080` | `cara-server` URL |
+    | `--output` | `table` | Output format: `table`, `json`, or `yaml` |
+
+    Example — output project details as JSON:
+
+    ```bash
+    ./bin/caractrl --output json get projects nginx-demo
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  `DATABASE_URL` has no default value. `cara-server` will refuse to start if this variable is not set or points to an unreachable PostgreSQL instance.
+</Warning>

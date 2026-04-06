@@ -1,0 +1,112 @@
+---
+title: "Register node"
+description: "POST /api/v1/nodes"
+---
+
+Registers a new node with the control plane.
+
+```
+POST /api/v1/nodes
+```
+
+<Note>
+  `cara-agent` calls this endpoint automatically on startup. You only need to call it directly if you are registering a node manually or building a custom agent.
+</Note>
+
+## Request body
+
+<ParamField body="apiVersion" type="string" required>
+  Must be `"caravanserai/v1"`.
+</ParamField>
+
+<ParamField body="kind" type="string" required>
+  Must be `"Node"`.
+</ParamField>
+
+<ParamField body="metadata" type="object" required>
+  <Expandable title="properties">
+    <ParamField body="name" type="string" required>
+      Unique name of the node within the cluster. Must be a valid DNS label (lowercase alphanumeric and hyphens, no leading/trailing hyphens).
+    </ParamField>
+
+    <ParamField body="labels" type="object">
+      Arbitrary key/value string pairs for selection and grouping.
+    </ParamField>
+
+    <ParamField body="annotations" type="object">
+      Non-identifying key/value metadata.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="spec" type="object">
+  <Expandable title="properties">
+    <ParamField body="hostname" type="string">
+      OS-level hostname of the machine.
+    </ParamField>
+
+    <ParamField body="unschedulable" type="boolean" default="false">
+      When `true`, the scheduler will not assign new projects to this node. Defaults to `false`.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+Returns `201 Created` with the registered `Node` object. The server initialises `status.state` to `NotReady`; the agent transitions it to `Ready` once heartbeats are confirmed.
+
+## Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X POST http://localhost:8080/api/v1/nodes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apiVersion": "caravanserai/v1",
+    "kind": "Node",
+    "metadata": {
+      "name": "worker-01",
+      "labels": {
+        "zone": "hsinchu"
+      }
+    },
+    "spec": {
+      "hostname": "worker-01.local",
+      "unschedulable": false
+    }
+  }'
+```
+
+```json 201 response
+{
+  "apiVersion": "caravanserai/v1",
+  "kind": "Node",
+  "metadata": {
+    "name": "worker-01",
+    "labels": {
+      "zone": "hsinchu"
+    },
+    "createdAt": "2025-04-06T12:00:00Z",
+    "updatedAt": "2025-04-06T12:00:00Z"
+  },
+  "spec": {
+    "hostname": "worker-01.local",
+    "unschedulable": false
+  },
+  "status": {
+    "state": "NotReady"
+  }
+}
+```
+
+```json 409 response
+{
+  "title": "Conflict",
+  "detail": "node already exists: worker-01",
+  "status": 409,
+  "type": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/409"
+}
+```
+
+</CodeGroup>

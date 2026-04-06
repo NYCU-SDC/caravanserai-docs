@@ -1,0 +1,110 @@
+---
+title: "Quick Start"
+description: "Deploy your first project in minutes"
+---
+
+This guide walks you through building Caravanserai, starting all components, and deploying an nginx project from scratch.
+
+<Steps>
+  <Step title="Build the binaries">
+    Clone the repository and run `make build` from the project root. This compiles all three binaries into the `bin/` directory.
+
+    ```bash
+    make build
+    # Outputs: bin/cara-server  bin/cara-agent  bin/caractrl
+    ```
+  </Step>
+
+  <Step title="Start PostgreSQL">
+    `cara-server` requires a PostgreSQL database. Start a local instance with Docker:
+
+    ```bash
+    docker run -d \
+      --name caravanserai-db \
+      -e POSTGRES_DB=caravanserai \
+      -e POSTGRES_USER=postgres \
+      -e POSTGRES_PASSWORD=password \
+      -p 5432:5432 \
+      postgres:16
+    ```
+  </Step>
+
+  <Step title="Start cara-server">
+    Pass the PostgreSQL connection string via `DATABASE_URL` and start the control-plane server. It listens on `0.0.0.0:8080` by default.
+
+    ```bash
+    DATABASE_URL="postgresql://postgres:password@localhost:5432/caravanserai?sslmode=disable" \
+      ./bin/cara-server
+    # Listening on 0.0.0.0:8080
+    ```
+  </Step>
+
+  <Step title="Start cara-agent">
+    On the same machine (or a different one), start the agent. Provide the server address with `SERVER_URL` and give the node a name with `NODE_NAME`.
+
+    ```bash
+    SERVER_URL=http://localhost:8080 \
+    NODE_NAME=my-node \
+      ./bin/cara-agent
+    # Agent registers itself, begins heartbeating and polling for work
+    ```
+
+    The agent self-registers with `cara-server` and immediately begins polling for projects to reconcile.
+  </Step>
+
+  <Step title="Apply the nginx project manifest">
+    Use `caractrl apply` to submit the example nginx project. Caravanserai schedules it onto the available node and the agent starts the container.
+
+    ```bash
+    ./bin/caractrl apply -f examples/nginx-project.yaml
+    # project/nginx-demo created
+    ```
+
+    The manifest at `examples/nginx-project.yaml` looks like this:
+
+    ```yaml nginx-project.yaml
+    apiVersion: caravanserai/v1
+    kind: Project
+    metadata:
+      name: nginx-demo
+    spec:
+      services:
+        - name: web
+          image: nginx:alpine
+    ```
+  </Step>
+
+  <Step title="Verify the project is running">
+    List all projects to confirm `nginx-demo` reached the `Running` phase:
+
+    ```bash
+    ./bin/caractrl get projects
+    ```
+
+    Expected output:
+
+    ```
+    NAME         PHASE     NODE      CONDITIONS          AGE
+    nginx-demo   Running   my-node   ContainersRunning   5s
+    ```
+  </Step>
+
+  <Step title="Inspect and clean up">
+    Explore the cluster state and tear down the project when you are done.
+
+    ```bash
+    # List all registered nodes
+    ./bin/caractrl get nodes
+
+    # Get full project details as JSON
+    ./bin/caractrl --output json get projects nginx-demo
+
+    # Delete the project — the agent tears down all containers
+    ./bin/caractrl delete project nginx-demo
+    ```
+  </Step>
+</Steps>
+
+<Note>
+  The `examples/` directory contains additional sample manifests, including a multi-service WordPress + MySQL project with volumes. Use them to explore more of what Caravanserai supports.
+</Note>

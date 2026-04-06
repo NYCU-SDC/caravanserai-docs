@@ -1,0 +1,256 @@
+---
+title: "Deploy a project"
+description: "Step-by-step guide to deploying your first containerized workload on Caravanserai."
+---
+
+A **Project** is the core workload unit in Caravanserai. It groups one or more containers (services) that run together on a single node, sharing a Docker bridge network. Service names resolve as hostnames inside that network, identical to Docker Compose.
+
+<Steps>
+  <Step title="Write a project manifest">
+    Create a YAML file that describes your workload. At minimum you need `apiVersion`, `kind`, `metadata.name`, and at least one service under `spec.services`.
+
+    ```yaml project.yaml
+    apiVersion: caravanserai/v1
+    kind: Project
+    metadata:
+      name: my-project
+    spec:
+      services:
+        - name: web
+          image: nginx:alpine
+          env:
+            - name: APP_ENV
+              value: production
+      volumes: []
+    ```
+
+    The fields you can set in `spec`:
+
+    | Field | Required | Description |
+    |-------|----------|-------------|
+    | `services` | Yes | Ordered list of containers to run. |
+    | `services[].name` | Yes | Service name — also the DNS hostname inside the bridge network. |
+    | `services[].image` | Yes | Docker image reference, e.g. `postgres:15`. |
+    | `services[].env` | No | Environment variables injected at container start. |
+    | `services[].volumeMounts` | No | Named volumes to mount into the container. |
+    | `volumes` | No | Named volume definitions shared across services. |
+    | `ingress` | No | HTTP routing rules for internal traffic. |
+    | `expireAt` | No | RFC 3339 timestamp after which the GC controller deletes the project. |
+
+    ### Multi-service example: WordPress
+
+    The following manifest runs MySQL and WordPress together. The `app` service
+    reaches the database using the hostname `db` — resolved automatically over the
+    shared bridge network.
+
+    ```yaml wordpress.yaml
+    apiVersion: caravanserai/v1
+    kind: Project
+    metadata:
+      name: wordpress
+    spec:
+      services:
+        - name: db
+          image: mysql:8
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: "secret"
+            - name: MYSQL_DATABASE
+              value: "wp"
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+        - name: app
+          image: wordpress:latest
+          env:
+            - name: WORDPRESS_DB_HOST
+              value: db          # resolves via the shared bridge network
+            - name: WORDPRESS_DB_PASSWORD
+              value: "secret"
+            - name: WORDPRESS_DB_NAME
+              value: "wp"
+      volumes:
+        - name: mysql-data
+          type: Ephemeral
+    ```
+
+    <Note>
+      `Ephemeral` is currently the only supported volume type. Ephemeral volumes are discarded when the project is stopped or moved to a different node.
+    </Note>
+  </Step>
+
+  <Step title="Apply the manifest">
+    Run `caractrl apply` to send the manifest to the control plane. The API server creates the project record and sets its initial phase to `Pending`.
+
+    ```bash
+    caractrl apply -f project.yaml
+    ```
+
+    You should see output like:
+
+    ```
+    project "my-project" created
+    ```
+  </Step>
+
+  <Step title="Watch the phase change">
+    Poll the project status to track its progress through the lifecycle:
+
+    ```bash
+    caractrl get projects my-project
+    ```
+
+    Example output:
+
+    ```
+    NAME         PHASE     NODE      CONDITIONS          AGE
+    my-project   Running   node-01   ContainersRunning   12s
+    ```
+
+    The `PHASE` column reflects the current lifecycle state:
+
+    | Phase | Set by | Meaning |
+    |-------|--------|---------|
+    | `Pending` | Server | Accepted by the API; the scheduler has not yet chosen a node. |
+    | `Scheduled` | Scheduler | A node has been assigned; the agent has not confirmed containers are up. |
+    | `Running` | Agent | All containers are running. |
+    | `Failed` | Agent | The agent could not start the project or reported a terminal error. |
+    | `Terminating` | Server | A deletion request was received; the agent is tearing down containers. |
+    | `Terminated` | Agent | All containers and Docker resources have been removed. |
+
+    <Tip>
+      Filter the project list by phase to focus on what matters:
+
+      ```bash
+      caractrl get projects --phase=Running
+      caractrl get projects --phase=Pending
+      ```
+
+      Valid values for `--phase` are: `Pending`, `Scheduled`, `Running`, `Failed`, `Terminating`.
+    </Tip>
+  </Step>
+
+  <Step title="Check conditions if something goes wrong">
+    If your project stays in `Pending` or moves to `Failed`, inspect the `conditions` array for a detailed reason. Use `--output json` to see the full status object:
+
+    ```bash
+    caractrl --output json get projects my-project
+    ```
+
+    Look for the `status.conditions` array in the output:
+
+    ```json
+    {
+      "status": {
+        "phase": "Failed",
+        "nodeRef": "node-01",
+        "conditions": [
+          {
+            "type": "ContainersRunning",
+            "status": "False",
+            "reason": "ImagePullFailed",
+            "message": "failed to pull image \"myapp:typo\": not found"
+          }
+        ]
+      }
+    }
+    ```
+
+    Each condition has a `type`, `status` (`True` / `False`), a machine-readable `reason`, and a human-readable `message`.
+  </Step>
+
+  <Step title="View the assigned node">
+    Once the scheduler picks a node, `status.nodeRef` is populated with the node name. You can see it in the JSON output:
+
+    ```bash
+    caractrl --output json get projects my-project
+    ```
+
+    ```json
+    {
+      "status": {
+        "phase": "Running",
+        "nodeRef": "node-01"
+      }
+    }
+    ```
+
+    Use the node name to inspect that node's capacity and health:
+
+    ```bash
+    caractrl get nodes node-01
+    ```
+  </Step>
+
+  <Step title="Clean up">
+    Delete a project when you no longer need it. The control plane transitions the project to `Terminating` and signals the agent to tear down all containers, networks, and volumes.
+
+    ```bash
+    caractrl delete project my-project
+    ```
+
+    If the agent acknowledges the teardown synchronously, you see:
+
+    ```
+    project "my-project" deleted
+    ```
+
+    Otherwise you see:
+
+    ```
+    project "my-project" is being deleted
+    ```
+
+    In either case, the project disappears from the list once the agent sets the phase to `Terminated` and the termination controller removes the record.
+  </Step>
+</Steps>
+
+## Common issues
+
+<AccordionGroup>
+  <Accordion title="Project stays Pending">
+    The scheduler only assigns work to nodes in the `Ready` state. If no ready nodes exist in the cluster, the project waits indefinitely.
+
+    Check your node states:
+
+    ```bash
+    caractrl get nodes
+    ```
+
+    If all nodes are `NotReady`, verify that `cara-agent` is running on at least one machine and that its heartbeats are reaching the control plane. See [Node management](/guides/node-management) for details.
+  </Accordion>
+
+  <Accordion title="Project moves to Failed">
+    A `Failed` phase means the agent encountered a terminal error it cannot recover from on its own. The most common causes are:
+
+    - **Image pull failure** — the image name or tag is wrong, or the registry is unreachable from the node.
+    - **Port conflict** — another container on the node already occupies a required host port.
+    - **Volume error** — the Docker daemon could not create the volume.
+
+    Retrieve the full condition list to find the specific reason:
+
+    ```bash
+    caractrl --output json get projects my-project
+    ```
+
+    Fix the underlying issue, then delete and re-apply the project — there is no in-place restart.
+  </Accordion>
+</AccordionGroup>
+
+## Ephemeral environments with `spec.expireAt`
+
+Set `spec.expireAt` to an RFC 3339 timestamp to create a project that the GC controller automatically deletes after that time. This is useful for preview or CI environments that should not outlast a fixed window.
+
+```yaml
+apiVersion: caravanserai/v1
+kind: Project
+metadata:
+  name: pr-preview-42
+spec:
+  expireAt: "2026-04-07T00:00:00Z"
+  services:
+    - name: web
+      image: myapp:pr-42
+```
+
+Once the timestamp passes, the GC controller deletes the project exactly as if you had run `caractrl delete project pr-preview-42`.

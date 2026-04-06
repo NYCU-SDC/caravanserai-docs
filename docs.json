@@ -1,0 +1,100 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "aspen",
+  "name": "Caravanserai",
+  "logo": {
+    "light": "https://media.brand.dev/bc507d97-b3a9-43f4-8318-424c1322e75a.png",
+    "dark": "https://media.brand.dev/bc507d97-b3a9-43f4-8318-424c1322e75a.png"
+  },
+  "favicon": "https://media.brand.dev/03f699e4-d5fa-404d-b358-286beecb6f2d.png",
+  "colors": {
+    "primary": "#7c7c7c",
+    "light": "#0e0e0e",
+    "dark": "#c9c9c9"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/NYCU-SDC/caravanserai"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/nodes",
+              "concepts/projects",
+              "concepts/scheduling"
+            ]
+          },
+          {
+            "group": "Manifests",
+            "pages": [
+              "manifests/overview",
+              "manifests/project",
+              "manifests/node"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/cara-server",
+              "configuration/cara-agent",
+              "configuration/caractrl"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/deploy-project",
+              "guides/port-forwarding",
+              "guides/node-management"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview"
+            ]
+          },
+          {
+            "group": "Nodes",
+            "pages": [
+              "api/nodes/list",
+              "api/nodes/get",
+              "api/nodes/register",
+              "api/nodes/delete",
+              "api/nodes/heartbeat"
+            ]
+          },
+          {
+            "group": "Projects",
+            "pages": [
+              "api/projects/list",
+              "api/projects/get",
+              "api/projects/create",
+              "api/projects/delete"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

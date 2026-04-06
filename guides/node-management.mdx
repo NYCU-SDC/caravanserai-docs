@@ -1,0 +1,164 @@
+---
+title: "Node management"
+description: "Add, inspect, drain, and remove nodes from your cluster."
+---
+
+A **Node** represents a physical or virtual machine running `cara-agent`. Nodes self-register with the control plane on startup and send periodic heartbeats so the controller manager can track their health. The scheduler only assigns new projects to nodes whose state is `Ready`.
+
+## Adding a node
+
+Start `cara-agent` on the machine you want to add. Set `SERVER_URL` to point at your control plane and `NODE_NAME` to the name the node should register under:
+
+```bash
+SERVER_URL=http://cara-server:8080 \
+NODE_NAME=worker-01 \
+  ./bin/cara-agent
+```
+
+The agent registers itself with the control plane on startup, then begins sending heartbeats and polling for work. You do not need to apply a manifest — registration is automatic.
+
+If you want to pre-create a node record manually (for example to set labels before the agent connects), apply a Node manifest:
+
+```yaml node.yaml
+apiVersion: caravanserai/v1
+kind: Node
+metadata:
+  name: worker-01
+  labels:
+    caravanserai.io/zone: ed312
+    caravanserai.io/region: north
+spec:
+  hostname: worker-01.local
+  unschedulable: false
+```
+
+```bash
+caractrl apply -f node.yaml
+```
+
+## Listing nodes
+
+List all nodes in the cluster:
+
+```bash
+caractrl get nodes
+```
+
+Example output:
+
+```
+NAME        STATE     CONDITIONS   AGE
+worker-01   Ready     Healthy      2h
+worker-02   NotReady  NoHeartbeat  5m
+worker-03   Draining  Unschedulable 10m
+```
+
+The `STATE` column reflects the high-level health summary computed by the controller manager.
+
+| State | Meaning |
+|-------|---------|
+| `Ready` | The agent is heartbeating and the node accepts new project assignments. |
+| `NotReady` | Heartbeats have stopped or a critical condition is present. The scheduler skips this node. |
+| `Draining` | `spec.unschedulable` is `true`. Existing projects continue running, but no new projects are scheduled here. |
+
+## Inspecting a node
+
+Get a single node's table summary:
+
+```bash
+caractrl get nodes worker-01
+```
+
+For the full status object including network details, capacity, allocatable resources, heartbeat timestamp, and conditions, use JSON output:
+
+```bash
+caractrl --output json get nodes worker-01
+```
+
+Key fields in the output:
+
+| Field | Description |
+|-------|-------------|
+| `status.state` | High-level state: `Ready`, `NotReady`, or `Draining`. |
+| `status.network.ip` | Overlay network IP assigned to the node. |
+| `status.network.agentPort` | TCP port the agent's HTTP server listens on (used by port-forward). |
+| `status.lastHeartbeat` | Timestamp of the most recent heartbeat from the agent. |
+| `status.capacity` | Raw physical resources reported by the agent. |
+| `status.allocatable` | Capacity minus system-reserved amounts; used by the scheduler. |
+| `status.conditions` | List of granular observable conditions on the node. |
+
+## Draining a node
+
+Draining prevents new projects from being scheduled onto a node while allowing existing projects to keep running. To drain a node, set `spec.unschedulable: true` in its manifest and apply it:
+
+```yaml worker-01-drain.yaml
+apiVersion: caravanserai/v1
+kind: Node
+metadata:
+  name: worker-01
+spec:
+  unschedulable: true
+```
+
+```bash
+caractrl apply -f worker-01-drain.yaml
+```
+
+The controller manager detects the change and transitions the node state to `Draining`. The scheduler stops assigning new projects to the node immediately. Projects already running on the node are unaffected — they continue running until you delete them or they expire.
+
+To make the node schedulable again, set `spec.unschedulable: false` and re-apply the manifest.
+
+## Removing a node
+
+Delete a node record from the control plane:
+
+```bash
+caractrl delete node worker-01
+```
+
+<Warning>
+  Deleting a node does **not** automatically stop or migrate the projects running on it. If the node has projects in `Running` phase, those projects lose their agent and will transition to `Failed` once heartbeats stop. Delete or migrate all running projects before removing a node from the cluster.
+</Warning>
+
+After deletion, the node no longer appears in `caractrl get nodes`. If `cara-agent` is still running on the machine, it will attempt to re-register with the control plane on its next startup.
+
+## Heartbeat monitoring
+
+`cara-agent` sends a heartbeat to the control plane on a configurable interval (default: `30s`). Each heartbeat updates `status.lastHeartbeat` and refreshes the node's reported capacity and network status.
+
+The control plane watches `lastHeartbeat`. When the timestamp is older than the heartbeat timeout threshold (90 seconds), it sets the node state to `NotReady` and adds a `NoHeartbeat` condition.
+
+Common causes of missed heartbeats:
+
+- `cara-agent` process crashed or was stopped.
+- Network partition between the agent machine and `cara-server`.
+- The machine running the agent was powered off or rebooted.
+
+Check `status.lastHeartbeat` to see when the agent last checked in:
+
+```bash
+caractrl --output json get nodes worker-01
+```
+
+## Node labels
+
+Add labels to a node to express zone, region, or hardware characteristics. You can use labels for documentation and future scheduling constraints.
+
+```yaml
+apiVersion: caravanserai/v1
+kind: Node
+metadata:
+  name: worker-01
+  labels:
+    caravanserai.io/zone: ed312
+    caravanserai.io/region: north
+spec:
+  hostname: worker-01.local
+  unschedulable: false
+```
+
+Apply the updated manifest to patch the node's labels:
+
+```bash
+caractrl apply -f worker-01.yaml
+```

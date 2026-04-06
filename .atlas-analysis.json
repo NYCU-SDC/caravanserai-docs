@@ -1,0 +1,116 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "Caravanserai",
+  "projectDescription": "A lightweight container orchestration system that schedules Docker workloads across a fleet of nodes through a central control plane, without requiring Kubernetes.",
+  "theme": "aspen",
+  "primaryColor": "#7c7c7c",
+  "lightColor": "#0e0e0e",
+  "darkColor": "#c9c9c9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/nodes",
+              "concepts/projects",
+              "concepts/scheduling"
+            ]
+          },
+          {
+            "group": "Manifests",
+            "pages": [
+              "manifests/overview",
+              "manifests/project",
+              "manifests/node"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/cara-server",
+              "configuration/cara-agent",
+              "configuration/caractrl"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/deploy-project",
+              "guides/port-forwarding",
+              "guides/node-management"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api/overview"
+            ]
+          },
+          {
+            "group": "Nodes",
+            "pages": [
+              "api/nodes/list",
+              "api/nodes/get",
+              "api/nodes/register",
+              "api/nodes/delete",
+              "api/nodes/heartbeat"
+            ]
+          },
+          {
+            "group": "Projects",
+            "pages": [
+              "api/projects/list",
+              "api/projects/get",
+              "api/projects/create",
+              "api/projects/delete"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Schedule Docker Compose-style workloads across multiple nodes without Kubernetes",
+    "Central control plane (cara-server) with distributed per-node agents (cara-agent)",
+    "Declarative YAML manifests for Nodes and Projects",
+    "CLI tool (caractrl) for managing nodes, projects, and port forwarding",
+    "Automatic project lifecycle management: Pending → Scheduled → Running → Failed",
+    "Shared Docker bridge network for inter-service discovery within a project",
+    "WebSocket-based port forwarding to containers on remote nodes",
+    "Named volume support for persistent and ephemeral storage",
+    "HTTP ingress rules with internal scope support"
+  ],
+  "publicApiSurface": [
+    "POST /api/v1/nodes — Register a node",
+    "GET /api/v1/nodes — List all nodes",
+    "GET /api/v1/nodes/{name} — Get a single node",
+    "DELETE /api/v1/nodes/{name} — Delete a node",
+    "POST /api/v1/nodes/{name}/heartbeat — Send a heartbeat",
+    "POST /api/v1/projects — Create a project",
+    "GET /api/v1/projects — List projects (?phase=, ?nodeRef=)",
+    "GET /api/v1/projects/{name} — Get a single project",
+    "DELETE /api/v1/projects/{name} — Delete a project",
+    "PATCH /api/v1/projects/{name}/status — Update project status",
+    "caractrl apply -f <manifest> — Apply a resource manifest",
+    "caractrl get nodes [name] — List or get nodes",
+    "caractrl get projects [name] [--phase] — List or get projects",
+    "caractrl delete node|project <name> — Delete a resource",
+    "caractrl port-forward <project>/<service> [LOCAL:]REMOTE — Forward ports to containers"
+  ]
+}

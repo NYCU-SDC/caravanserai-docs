@@ -1,0 +1,173 @@
+---
+title: "List projects"
+description: "GET /api/v1/projects"
+---
+
+Returns all projects, with optional filtering by phase and node.
+
+```
+GET /api/v1/projects
+```
+
+## Query parameters
+
+<ParamField query="phase" type="string">
+  Filter by lifecycle phase. Accepted values: `Pending`, `Scheduled`, `Running`, `Failed`, `Terminating`, `Terminated`.
+
+  You can repeat this parameter to match multiple phases (OR logic):
+
+  `?phase=Scheduled&phase=Running`
+
+  When combined with `nodeRef`, both filters are applied (AND logic).
+</ParamField>
+
+<ParamField query="nodeRef" type="string">
+  Filter by the name of the node the scheduler assigned to the project. Projects in `Pending` phase have no `nodeRef` and are excluded when this filter is set.
+</ParamField>
+
+## Response
+
+Returns a `ProjectList` object.
+
+<ResponseField name="apiVersion" type="string" required>
+  Always `"caravanserai/v1"`.
+</ResponseField>
+
+<ResponseField name="kind" type="string" required>
+  Always `"ProjectList"`.
+</ResponseField>
+
+<ResponseField name="items" type="object[]" required>
+  Array of Project objects. Empty when no projects match.
+
+  <Expandable title="items[]">
+    <ResponseField name="apiVersion" type="string">
+      Always `"caravanserai/v1"`.
+    </ResponseField>
+
+    <ResponseField name="kind" type="string">
+      Always `"Project"`.
+    </ResponseField>
+
+    <ResponseField name="metadata" type="object">
+      <Expandable title="properties">
+        <ResponseField name="name" type="string" required>
+          Unique name of the project.
+        </ResponseField>
+
+        <ResponseField name="labels" type="object">
+          Arbitrary key/value string pairs.
+        </ResponseField>
+
+        <ResponseField name="annotations" type="object">
+          Non-identifying key/value metadata.
+        </ResponseField>
+
+        <ResponseField name="createdAt" type="string">
+          RFC 3339 timestamp set by the server on first write.
+        </ResponseField>
+
+        <ResponseField name="updatedAt" type="string">
+          RFC 3339 timestamp updated by the server on every write.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="spec" type="object">
+      <Expandable title="properties">
+        <ResponseField name="services" type="object[]" required>
+          Ordered list of container definitions.
+        </ResponseField>
+
+        <ResponseField name="volumes" type="object[]">
+          Named storage volumes shared across services.
+        </ResponseField>
+
+        <ResponseField name="ingress" type="object[]">
+          HTTP ingress routing rules.
+        </ResponseField>
+
+        <ResponseField name="expireAt" type="string">
+          RFC 3339 timestamp after which the GC controller deletes the project.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+
+    <ResponseField name="status" type="object">
+      <Expandable title="properties">
+        <ResponseField name="phase" type="string">
+          Current lifecycle phase: `Pending`, `Scheduled`, `Running`, `Failed`, `Terminating`, or `Terminated`.
+        </ResponseField>
+
+        <ResponseField name="nodeRef" type="string">
+          Name of the node assigned by the scheduler. Empty while `Pending`.
+        </ResponseField>
+
+        <ResponseField name="conditions" type="object[]">
+          Granular observable states. See [Get project](/api/projects/get) for the full condition schema.
+        </ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Examples
+
+<CodeGroup>
+
+```bash All projects
+curl http://localhost:8080/api/v1/projects
+```
+
+```bash Filter by phase
+curl "http://localhost:8080/api/v1/projects?phase=Running"
+```
+
+```bash Filter by node
+curl "http://localhost:8080/api/v1/projects?nodeRef=worker-01"
+```
+
+```bash Multiple phases
+curl "http://localhost:8080/api/v1/projects?phase=Scheduled&phase=Running"
+```
+
+```json Response
+{
+  "apiVersion": "caravanserai/v1",
+  "kind": "ProjectList",
+  "items": [
+    {
+      "apiVersion": "caravanserai/v1",
+      "kind": "Project",
+      "metadata": {
+        "name": "nginx-demo",
+        "createdAt": "2025-04-06T10:00:00Z",
+        "updatedAt": "2025-04-06T10:00:05Z"
+      },
+      "spec": {
+        "services": [
+          {
+            "name": "web",
+            "image": "nginx:alpine"
+          }
+        ]
+      },
+      "status": {
+        "phase": "Running",
+        "nodeRef": "worker-01",
+        "conditions": [
+          {
+            "type": "Phase",
+            "status": "True",
+            "reason": "AgentReady",
+            "message": "All containers are running",
+            "lastTransitionTime": "2025-04-06T10:00:05Z"
+          }
+        ]
+      }
+    }
+  ]
+}
+```
+
+</CodeGroup>

@@ -1,0 +1,55 @@
+---
+title: "Caravanserai"
+description: "Lightweight container orchestration for self-hosted clusters — schedule Docker workloads across multiple nodes without Kubernetes."
+---
+
+Caravanserai lets you run Docker Compose-style workloads across a fleet of machines through a single control plane. Define your services as a **Project**, and Caravanserai schedules, starts, and monitors them on the best available **Node** in your cluster.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Deploy your first project in under 5 minutes.
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Build and run the control plane, agents, and CLI.
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/nodes">
+    Understand Nodes, Projects, and the scheduling lifecycle.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/overview">
+    Full HTTP API reference for Nodes and Projects.
+  </Card>
+</CardGroup>
+
+## How it works
+
+<Steps>
+  <Step title="Run the control plane">
+    Start `cara-server` — the central API server and controller manager that receives workload requests and manages cluster state.
+  </Step>
+  <Step title="Add nodes">
+    Start `cara-agent` on each machine you want in your cluster. Agents self-register with the control plane and begin heartbeating.
+  </Step>
+  <Step title="Deploy a project">
+    Write a YAML manifest describing your containers and apply it with `caractrl apply -f project.yaml`. The scheduler picks a node and your containers start.
+  </Step>
+  <Step title="Manage your cluster">
+    Use `caractrl get`, `delete`, and `port-forward` to inspect resources, tear down workloads, and tunnel into running containers.
+  </Step>
+</Steps>
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="No Kubernetes required" icon="circle-check">
+    Purpose-built for small-to-medium self-hosted clusters. No etcd, no CNI plugins, no cluster certificates.
+  </Card>
+  <Card title="Docker Compose semantics" icon="docker">
+    Services within a Project share a Docker bridge network and resolve each other by name — just like Compose.
+  </Card>
+  <Card title="Declarative manifests" icon="file-code">
+    Define Nodes and Projects in YAML. Apply, inspect, and delete resources with `caractrl`.
+  </Card>
+  <Card title="Port forwarding" icon="arrow-right-arrow-left">
+    Tunnel local ports directly to containers on remote nodes over a secure WebSocket connection.
+  </Card>
+</CardGroup>

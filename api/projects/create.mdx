@@ -1,0 +1,239 @@
+---
+title: "Create project"
+description: "POST /api/v1/projects"
+---
+
+Creates a new project and submits it for scheduling.
+
+```
+POST /api/v1/projects
+```
+
+The server validates the request, sets `status.phase` to `Pending`, and stores the project. The scheduler picks it up asynchronously and assigns it to a `Ready` node.
+
+## Request body
+
+<ParamField body="apiVersion" type="string" required>
+  Must be `"caravanserai/v1"`.
+</ParamField>
+
+<ParamField body="kind" type="string" required>
+  Must be `"Project"`.
+</ParamField>
+
+<ParamField body="metadata" type="object" required>
+  <Expandable title="properties">
+    <ParamField body="name" type="string" required>
+      Unique name for the project. Must be a valid DNS label (lowercase alphanumeric and hyphens, no leading/trailing hyphens).
+    </ParamField>
+
+    <ParamField body="labels" type="object">
+      Arbitrary key/value string pairs for selection and grouping.
+    </ParamField>
+
+    <ParamField body="annotations" type="object">
+      Non-identifying key/value metadata.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+<ParamField body="spec" type="object" required>
+  <Expandable title="properties">
+    <ParamField body="services" type="object[]" required>
+      Ordered list of containers to run. At least one service is required, and every service must have a non-empty `image`.
+
+      <Expandable title="services[]">
+        <ParamField body="name" type="string" required>
+          Service name. Used as the DNS hostname inside the shared Docker bridge network, so services can reach each other by name.
+        </ParamField>
+
+        <ParamField body="image" type="string" required>
+          Docker image reference, e.g. `"nginx:alpine"` or `"postgres:15"`.
+        </ParamField>
+
+        <ParamField body="env" type="object[]">
+          Environment variables injected into the container at runtime.
+
+          <Expandable title="env[]">
+            <ParamField body="name" type="string" required>
+              Variable name.
+            </ParamField>
+
+            <ParamField body="value" type="string">
+              Variable value.
+            </ParamField>
+          </Expandable>
+        </ParamField>
+
+        <ParamField body="volumeMounts" type="object[]">
+          Volumes to mount into this container.
+
+          <Expandable title="volumeMounts[]">
+            <ParamField body="name" type="string" required>
+              Name of a volume defined in `spec.volumes`.
+            </ParamField>
+
+            <ParamField body="mountPath" type="string" required>
+              Absolute path inside the container where the volume is mounted.
+            </ParamField>
+          </Expandable>
+        </ParamField>
+      </Expandable>
+    </ParamField>
+
+    <ParamField body="volumes" type="object[]">
+      Named volumes shared across services. Reference a volume from a service by setting `volumeMounts[].name` to the same value.
+
+      <Expandable title="volumes[]">
+        <ParamField body="name" type="string" required>
+          Unique volume name within the project.
+        </ParamField>
+
+        <ParamField body="type" type="string" required>
+          Volume lifecycle type. Currently only `Ephemeral` is supported — the volume is discarded when the project is stopped or moved to another node.
+        </ParamField>
+      </Expandable>
+    </ParamField>
+
+    <ParamField body="ingress" type="object[]">
+      HTTP ingress routing rules. Each rule maps a hostname to a backend service.
+
+      <Expandable title="ingress[]">
+        <ParamField body="name" type="string" required>
+          Unique name for this ingress rule within the project.
+        </ParamField>
+
+        <ParamField body="host" type="string">
+          Hostname for the rule. If the value contains a dot it is used verbatim; otherwise the hostname is assembled as `{host}.{environment}.{baseDomain}`.
+        </ParamField>
+
+        <ParamField body="target" type="object" required>
+          <Expandable title="properties">
+            <ParamField body="service" type="string" required>
+              Name of the service to route traffic to.
+            </ParamField>
+
+            <ParamField body="port" type="integer" required>
+              Port on the target service.
+            </ParamField>
+          </Expandable>
+        </ParamField>
+
+        <ParamField body="access" type="object">
+          <Expandable title="properties">
+            <ParamField body="scope" type="string" required>
+              Currently only `Internal` is supported — the route is visible only on the Headscale overlay network.
+            </ParamField>
+          </Expandable>
+        </ParamField>
+      </Expandable>
+    </ParamField>
+
+    <ParamField body="expireAt" type="string">
+      RFC 3339 timestamp. When set, the GC controller deletes the project after this time. Useful for ephemeral preview or review environments.
+    </ParamField>
+  </Expandable>
+</ParamField>
+
+## Response
+
+Returns `201 Created` with the stored `Project` object. `status.phase` is always `Pending` at creation time.
+
+Returns `409 Conflict` if a project with the same name already exists.
+
+## Examples
+
+<CodeGroup>
+
+```bash Minimal nginx project
+curl -X POST http://localhost:8080/api/v1/projects \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apiVersion": "caravanserai/v1",
+    "kind": "Project",
+    "metadata": {
+      "name": "nginx-demo"
+    },
+    "spec": {
+      "services": [
+        {
+          "name": "web",
+          "image": "nginx:alpine"
+        }
+      ]
+    }
+  }'
+```
+
+```bash Multi-service with volume
+curl -X POST http://localhost:8080/api/v1/projects \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apiVersion": "caravanserai/v1",
+    "kind": "Project",
+    "metadata": {
+      "name": "wordpress"
+    },
+    "spec": {
+      "services": [
+        {
+          "name": "db",
+          "image": "mysql:8",
+          "env": [
+            { "name": "MYSQL_ROOT_PASSWORD", "value": "secret" },
+            { "name": "MYSQL_DATABASE", "value": "wp" }
+          ],
+          "volumeMounts": [
+            { "name": "mysql-data", "mountPath": "/var/lib/mysql" }
+          ]
+        },
+        {
+          "name": "app",
+          "image": "wordpress:latest",
+          "env": [
+            { "name": "WORDPRESS_DB_HOST", "value": "db" },
+            { "name": "WORDPRESS_DB_PASSWORD", "value": "secret" },
+            { "name": "WORDPRESS_DB_NAME", "value": "wp" }
+          ]
+        }
+      ],
+      "volumes": [
+        { "name": "mysql-data", "type": "Ephemeral" }
+      ]
+    }
+  }'
+```
+
+```json 201 response
+{
+  "apiVersion": "caravanserai/v1",
+  "kind": "Project",
+  "metadata": {
+    "name": "nginx-demo",
+    "createdAt": "2025-04-06T12:00:00Z",
+    "updatedAt": "2025-04-06T12:00:00Z"
+  },
+  "spec": {
+    "services": [
+      {
+        "name": "web",
+        "image": "nginx:alpine"
+      }
+    ]
+  },
+  "status": {
+    "phase": "Pending"
+  }
+}
+```
+
+```json 409 response
+{
+  "title": "Conflict",
+  "detail": "project already exists: nginx-demo",
+  "status": 409,
+  "type": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/409"
+}
+```
+
+</CodeGroup>

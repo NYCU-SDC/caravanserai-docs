@@ -1,0 +1,151 @@
+---
+title: "cara-agent"
+description: "Configure the Caravanserai node agent"
+---
+
+`cara-agent` runs on every node in your cluster. It registers the node with `cara-server`, sends periodic heartbeats to signal liveness, polls for assigned projects, and reconciles the desired container state against the local Docker daemon. Each agent manages one node.
+
+Like `cara-server`, the agent merges configuration from four sources in order: `config.yaml` → `.env` → environment variables → CLI flags. Later sources override earlier ones.
+
+## Configuration reference
+
+<ParamField path="debug" type="boolean" default="false">
+  Enable debug-level logging. Env var: `DEBUG`.
+</ParamField>
+
+<ParamField path="server_url" type="string" default="http://localhost:8080">
+  HTTP address of `cara-server`. The agent dials this URL to register, send heartbeats, and fetch project assignments. Env var: `SERVER_URL`.
+</ParamField>
+
+<ParamField path="node_name" type="string">
+  Name the agent registers under in the control plane. Must be unique across the cluster. Env var: `NODE_NAME`.
+
+  <Note>
+    When `node_name` is not set, the agent uses the machine's OS hostname returned by `os.Hostname()`. Set it explicitly when multiple agents share the same hostname (for example, inside containers or VMs with default names), or when you want a stable, human-readable name independent of the hostname.
+  </Note>
+</ParamField>
+
+<ParamField path="heartbeat_interval" type="duration" default="30s">
+  How often the agent sends a heartbeat to `cara-server`. Accepts Go duration strings: `30s`, `1m`, `2m30s`. Env var: `HEARTBEAT_INTERVAL`.
+
+  <Warning>
+    If `cara-server` does not receive a heartbeat within the expected interval, it marks the node as `NotReady`. The scheduler will not assign new projects to a `NotReady` node. Keep this value well below any network timeout between agent and server.
+  </Warning>
+</ParamField>
+
+<ParamField path="docker_host" type="string" default="unix:///var/run/docker.sock">
+  Endpoint of the Docker daemon the agent manages. Env var: `DOCKER_HOST`.
+
+  <Note>
+    Use a `tcp://` URL to connect to a remote Docker daemon — for example, `tcp://192.168.1.50:2375`. Ensure the daemon is secured with TLS when exposed over a network.
+  </Note>
+</ParamField>
+
+<ParamField path="listen_port" type="string" default="9090">
+  TCP port for the agent's own HTTP server, which exposes the port-forward WebSocket endpoint and a health probe. Env var: `AGENT_LISTEN_PORT`.
+</ParamField>
+
+## Starting the agent
+
+<Steps>
+  <Step title="Build the binary">
+    ```bash
+    make build
+    # Output: bin/cara-agent
+    ```
+  </Step>
+  <Step title="Start the agent with environment variables">
+    ```bash
+    SERVER_URL=http://cara-server.example.com:8080 \
+    NODE_NAME=my-node \
+      ./bin/cara-agent
+    ```
+
+    The agent registers itself with the control plane, then begins heartbeating and polling for project assignments.
+  </Step>
+</Steps>
+
+## Configuration examples
+
+### config.yaml
+
+```yaml config.yaml
+debug: false
+server_url: http://cara-server.example.com:8080
+node_name: worker-01
+heartbeat_interval: 30s
+docker_host: unix:///var/run/docker.sock
+listen_port: "9090"
+```
+
+### .env file
+
+```bash .env
+DEBUG=false
+SERVER_URL=http://cara-server.example.com:8080
+NODE_NAME=worker-01
+HEARTBEAT_INTERVAL=30s
+DOCKER_HOST=unix:///var/run/docker.sock
+AGENT_LISTEN_PORT=9090
+```
+
+### CLI flags
+
+```bash
+./bin/cara-agent \
+  -server-url http://cara-server.example.com:8080 \
+  -node-name worker-01 \
+  -heartbeat-interval 30s \
+  -agent-port 9090
+```
+
+## Running multiple agents
+
+Each agent must use a distinct `node_name`. Start one agent per machine with its own name:
+
+<CodeGroup>
+
+```bash worker-01
+SERVER_URL=http://cara-server.example.com:8080 \
+NODE_NAME=worker-01 \
+  ./bin/cara-agent
+```
+
+```bash worker-02
+SERVER_URL=http://cara-server.example.com:8080 \
+NODE_NAME=worker-02 \
+  ./bin/cara-agent
+```
+
+```bash worker-03
+SERVER_URL=http://cara-server.example.com:8080 \
+NODE_NAME=worker-03 \
+  ./bin/cara-agent
+```
+
+</CodeGroup>
+
+After all agents start, verify they appear as `Ready`:
+
+```bash
+./bin/caractrl get nodes
+# NAME        STATUS   AGE
+# worker-01   Ready    12s
+# worker-02   Ready    8s
+# worker-03   Ready    3s
+```
+
+## Using a remote Docker daemon
+
+Point the agent at a remote Docker daemon using `DOCKER_HOST`:
+
+```bash
+SERVER_URL=http://cara-server.example.com:8080 \
+NODE_NAME=remote-node \
+DOCKER_HOST=tcp://192.168.1.50:2375 \
+  ./bin/cara-agent
+```
+
+<Warning>
+  A Docker daemon exposed over TCP without TLS allows unauthenticated access to the host. Always secure remote Docker endpoints with mutual TLS in production environments.
+</Warning>

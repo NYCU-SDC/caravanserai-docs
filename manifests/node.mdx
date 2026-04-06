@@ -1,0 +1,154 @@
+---
+title: "Node Manifest"
+description: "Register and configure cluster nodes"
+---
+
+A Node represents a physical or virtual machine managed by a `cara-agent` instance. Caravanserai uses Nodes as scheduling targets: the Scheduler assigns Projects only to Nodes in the `Ready` state.
+
+<Note>
+  `cara-agent` self-registers its Node with the control plane on startup using the `NODE_NAME` environment variable. You only need to write a Node manifest manually when you want to pre-register a node before the agent starts, or to update node configuration such as labels or schedulability.
+</Note>
+
+## Schema
+
+### Top-level fields
+
+<ParamField path="apiVersion" type="string" required>
+  Must be `caravanserai/v1`.
+</ParamField>
+
+<ParamField path="kind" type="string" required>
+  Must be `Node`.
+</ParamField>
+
+<ParamField path="metadata" type="object" required>
+  Identity metadata for the resource.
+</ParamField>
+
+<ParamField path="metadata.name" type="string" required>
+  Unique identifier for the Node within the cluster. This is the name the agent registers under and the name you use in `caractrl` commands. Typically matches the machine hostname or a descriptive label such as `edge-node-01`.
+</ParamField>
+
+<ParamField path="metadata.labels" type="object">
+  Arbitrary key/value pairs for grouping and selection. Common uses include zone or region labels, for example `caravanserai.io/zone: ed312`.
+</ParamField>
+
+### spec
+
+<ParamField path="spec.hostname" type="string">
+  The OS-level hostname of the machine, for example `pve-03` or `edge-01.local`. Used for informational purposes and audit trails.
+</ParamField>
+
+<ParamField path="spec.unschedulable" type="boolean" default="false">
+  When `true`, prevents the scheduler from assigning new Projects to this Node. Projects already running on the Node continue to run. Set this field to `true` before draining a node for maintenance.
+</ParamField>
+
+---
+
+## Example
+
+```yaml node.yaml
+apiVersion: caravanserai/v1
+kind: Node
+metadata:
+  name: edge-node-01
+  labels:
+    zone: hsinchu
+spec:
+  hostname: edge-01.local
+  unschedulable: false
+```
+
+---
+
+## Marking a node unschedulable
+
+Set `spec.unschedulable: true` to cordon a node. The control plane stops scheduling new Projects onto it while existing workloads continue running.
+
+<Steps>
+  <Step title="Edit your node manifest">
+    Set `unschedulable` to `true` in your manifest:
+
+    ```yaml node.yaml
+    apiVersion: caravanserai/v1
+    kind: Node
+    metadata:
+      name: edge-node-01
+    spec:
+      hostname: edge-01.local
+      unschedulable: true
+    ```
+  </Step>
+  <Step title="Apply the change">
+    ```bash
+    caractrl apply -f node.yaml
+    ```
+
+    The control plane marks the node unschedulable immediately. The scheduler will not place new Projects on this node until you set `unschedulable: false` and reapply.
+  </Step>
+  <Step title="Verify the node state">
+    ```bash
+    caractrl get nodes
+    ```
+
+    The node remains visible and its existing Projects continue to run. Only new scheduling is blocked.
+  </Step>
+</Steps>
+
+<Warning>
+  Setting `unschedulable: true` does not evict Projects already running on the node. To migrate workloads away, delete and reapply each Project after cordoning the node.
+</Warning>
+
+---
+
+## Status fields (read-only)
+
+The following fields are written by the system — by `cara-agent` (heartbeat data) and the Controller Manager (aggregated state). Do not include them in your manifests.
+
+<AccordionGroup>
+  <Accordion title="status.state">
+    High-level health summary of the Node. One of:
+
+    | Value | Meaning |
+    |---|---|
+    | `Ready` | Node is healthy and accepting work |
+    | `NotReady` | Agent heartbeat has timed out or the node is unhealthy |
+    | `Draining` | Node is being drained; no new Projects are scheduled |
+  </Accordion>
+  <Accordion title="status.network">
+    Overlay-network connectivity reported by the Headscale/Tailscale integration.
+
+    | Field | Description |
+    |---|---|
+    | `ip` | Headscale-assigned overlay IP address, e.g. `100.64.0.5` |
+    | `dnsName` | MagicDNS FQDN for service discovery |
+    | `mode` | `Direct` when a peer-to-peer path exists; `DERP` otherwise |
+    | `agentPort` | TCP port the agent's HTTP server listens on |
+    | `throughput.download` | Last measured download speed |
+    | `throughput.upload` | Last measured upload speed |
+    | `throughput.lastTestTime` | Timestamp of the last speed measurement |
+  </Accordion>
+  <Accordion title="status.capacity and status.allocatable">
+    Resource totals reported by the agent.
+
+    | Field | Description |
+    |---|---|
+    | `capacity` | Raw physical resource totals (cpu, memory, disk). Values use Kubernetes quantity format: `"4Gi"`, `"2000m"`. |
+    | `allocatable` | Capacity minus system-reserved amounts. The Scheduler uses this to determine available headroom for new Projects. |
+  </Accordion>
+  <Accordion title="status.lastHeartbeat">
+    RFC 3339 timestamp of the most recent heartbeat received from the agent. The control plane uses this to detect unresponsive nodes and transition them to `NotReady`.
+  </Accordion>
+  <Accordion title="status.conditions">
+    A list of granular observable conditions on the Node. Each condition has:
+
+    | Field | Description |
+    |---|---|
+    | `type` | Machine-readable identifier, e.g. `Ready` |
+    | `status` | `True`, `False`, or `Unknown` |
+    | `reason` | CamelCase word summarising the current status |
+    | `message` | Human-readable explanation |
+    | `lastHeartbeatTime` | When this condition was last sampled |
+    | `lastTransitionTime` | When the status last changed |
+  </Accordion>
+</AccordionGroup>

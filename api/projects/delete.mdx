@@ -1,0 +1,63 @@
+---
+title: "Delete project"
+description: "DELETE /api/v1/projects/{name}"
+---
+
+Initiates deletion of a project.
+
+```
+DELETE /api/v1/projects/{name}
+```
+
+## Path parameters
+
+<ParamField path="name" type="string" required>
+  The unique name of the project to delete.
+</ParamField>
+
+## Response
+
+The response code and lifecycle behaviour depend on the project's current phase:
+
+| Current phase | Behaviour | Response |
+|---------------|-----------|----------|
+| `Pending` or `Failed` | No Docker resources exist. The project is removed from the store immediately. | `204 No Content` |
+| `Scheduled`, `Running` | The project transitions to `Terminating`. The agent tears down all containers and Docker resources, then reports `Terminated`. The control plane removes the record automatically. | `202 Accepted` |
+| `Terminating` | Already in progress. No-op — idempotent. | `202 Accepted` |
+
+### Terminating lifecycle
+
+```
+Scheduled / Running
+       │
+       ▼ (DELETE request)
+  Terminating  ──(agent tears down containers)──▶  Terminated
+                                                        │
+                                           (control plane cleanup)
+                                                        │
+                                                        ▼
+                                                  (deleted from store)
+```
+
+<Info>
+  After you send a DELETE request, the project enters `Terminating` phase. It remains visible in the API until the agent confirms all Docker resources have been removed and the controller performs the final deletion. Poll [GET /api/v1/projects/{name}](/api/projects/get) to observe progress.
+</Info>
+
+## Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X DELETE http://localhost:8080/api/v1/projects/nginx-demo
+```
+
+```json 404 response
+{
+  "title": "Not Found",
+  "detail": "project not found: nginx-demo",
+  "status": 404,
+  "type": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/404"
+}
+```
+
+</CodeGroup>

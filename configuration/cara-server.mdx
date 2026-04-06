@@ -1,0 +1,139 @@
+---
+title: "cara-server"
+description: "Configure the Caravanserai control plane"
+---
+
+`cara-server` is the control-plane process for Caravanserai. It exposes the REST API that `cara-agent` instances and `caractrl` communicate with, runs the scheduler that assigns projects to nodes, and continuously drives workloads toward their desired state. It requires a PostgreSQL database for persistence.
+
+## Configuration precedence
+
+`cara-server` merges configuration from four sources. Later sources override earlier ones:
+
+1. `config.yaml` — file in the working directory
+2. `.env` — dotenv file in the working directory
+3. Environment variables
+4. CLI flags
+
+<Note>
+You do not need to use all four sources. A single `.env` file or a set of environment variables is sufficient for most deployments.
+</Note>
+
+## Configuration reference
+
+<ParamField path="debug" type="boolean" default="false">
+  Enable debug-level logging. Set to `true` to emit verbose structured log output. Env var: `DEBUG`.
+</ParamField>
+
+<ParamField path="host" type="string" default="0.0.0.0">
+  IP address for the HTTP server to bind to. Use `127.0.0.1` to restrict access to localhost. Env var: `HOST`.
+</ParamField>
+
+<ParamField path="port" type="string" default="8080">
+  TCP port for the HTTP server. Env var: `PORT`.
+</ParamField>
+
+<ParamField path="database_url" type="string" required>
+  PostgreSQL connection string (DSN). Env var: `DATABASE_URL`.
+
+  <Warning>
+    `database_url` is required. `cara-server` will refuse to start if this value is missing or empty.
+  </Warning>
+
+  Accepted formats:
+
+  ```
+  postgresql://USER:PASSWORD@HOST:PORT/DBNAME?sslmode=disable
+  postgresql://USER:PASSWORD@HOST:PORT/DBNAME?sslmode=require
+  postgres://USER:PASSWORD@HOST/DBNAME
+  ```
+</ParamField>
+
+<ParamField path="otel_collector_url" type="string">
+  OTLP gRPC endpoint for OpenTelemetry trace and metric export. Env var: `OTEL_COLLECTOR_URL`.
+
+  <Note>
+    `otel_collector_url` is optional. When omitted, observability export is disabled and `cara-server` runs without tracing. Set this to the gRPC address of your OpenTelemetry Collector (for example, `otel-collector:4317`) to enable distributed tracing.
+  </Note>
+</ParamField>
+
+## Configuration examples
+
+### config.yaml
+
+Place `config.yaml` in the same directory as the `cara-server` binary:
+
+```yaml config.yaml
+debug: false
+host: 0.0.0.0
+port: 8080
+database_url: postgresql://postgres:password@localhost:5432/caravanserai?sslmode=disable
+otel_collector_url: otel-collector:4317
+```
+
+### .env file
+
+```bash .env
+DEBUG=false
+HOST=0.0.0.0
+PORT=8080
+DATABASE_URL=postgresql://postgres:password@localhost:5432/caravanserai?sslmode=disable
+OTEL_COLLECTOR_URL=otel-collector:4317
+```
+
+### Environment variables (inline)
+
+Pass configuration directly as environment variables when starting the server:
+
+```bash
+DATABASE_URL="postgresql://postgres:password@localhost:5432/caravanserai?sslmode=disable" \
+  ./bin/cara-server
+```
+
+### CLI flags
+
+```bash
+./bin/cara-server \
+  -host 0.0.0.0 \
+  -port 8080 \
+  -database_url "postgresql://postgres:password@localhost:5432/caravanserai?sslmode=disable" \
+  -debug
+```
+
+## PostgreSQL connection strings
+
+<CardGroup cols={2}>
+  <Card title="Local development" icon="laptop">
+    ```
+    postgresql://postgres:password@localhost:5432/caravanserai?sslmode=disable
+    ```
+  </Card>
+  <Card title="Production with TLS" icon="lock">
+    ```
+    postgresql://appuser:secret@db.example.com:5432/caravanserai?sslmode=require
+    ```
+  </Card>
+  <Card title="Unix socket" icon="server">
+    ```
+    postgresql:///caravanserai?host=/var/run/postgresql
+    ```
+  </Card>
+  <Card title="Connection pooler (pgBouncer)" icon="database">
+    ```
+    postgresql://appuser:secret@pgbouncer:6432/caravanserai?sslmode=require
+    ```
+  </Card>
+</CardGroup>
+
+<Tip>
+  Run PostgreSQL locally with Docker during development:
+
+  ```bash
+  docker run -d \
+    --name caravanserai-db \
+    -e POSTGRES_DB=caravanserai \
+    -e POSTGRES_USER=postgres \
+    -e POSTGRES_PASSWORD=password \
+    -p 5432:5432 \
+    postgres:16
+  ```
+</Tip>

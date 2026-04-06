@@ -1,0 +1,47 @@
+---
+title: "Delete node"
+description: "DELETE /api/v1/nodes/{name}"
+---
+
+Deletes a registered node from the control plane.
+
+```
+DELETE /api/v1/nodes/{name}
+```
+
+<Warning>
+  You cannot delete a node that has projects in the `Scheduled`, `Running`, or `Terminating` phase. The server returns `409 Conflict` and lists how many projects are still assigned. Delete or wait for those projects to finish before removing the node.
+</Warning>
+
+## Path parameters
+
+<ParamField path="name" type="string" required>
+  The unique name of the node to delete.
+</ParamField>
+
+## Response
+
+Returns `204 No Content` on success. The node record is removed from the store immediately.
+
+Returns `404 Not Found` if the node does not exist.
+
+Returns `409 Conflict` if one or more projects are still assigned to the node.
+
+## Example
+
+<CodeGroup>
+
+```bash cURL
+curl -X DELETE http://localhost:8080/api/v1/nodes/worker-01
+```
+
+```json 409 response
+{
+  "title": "Conflict",
+  "detail": "cannot delete node \"worker-01\": 2 project(s) still assigned",
+  "status": 409,
+  "type": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/409"
+}
+```
+
+</CodeGroup>

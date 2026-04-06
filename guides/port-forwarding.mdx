@@ -1,0 +1,107 @@
+---
+title: "Port forwarding"
+description: "Tunnel local ports to containers running on remote nodes."
+---
+
+Port forwarding lets you connect to a container port on a remote node as if it were running locally. It works similarly to `kubectl port-forward`: `caractrl` opens a local TCP listener and tunnels each connection to the target container through the node agent's WebSocket endpoint.
+
+This is useful for:
+- Inspecting a database or cache without exposing it over the network
+- Running local tools against a remote service during development
+- Debugging a container that is not exposed via ingress
+
+## Prerequisites
+
+- The target project must be in the `Running` phase.
+- The node agent (`cara-agent`) must be reachable from your machine on its agent port (default: `9090`).
+
+## Basic syntax
+
+```bash
+caractrl port-forward <project>/<service> [LOCAL_PORT:]REMOTE_PORT
+```
+
+| Argument | Description |
+|----------|-------------|
+| `<project>/<service>` | The project name and service name, separated by `/`. |
+| `REMOTE_PORT` | The port the container listens on. |
+| `LOCAL_PORT` | The port to bind on `127.0.0.1`. Defaults to `REMOTE_PORT` when omitted. |
+
+## Examples
+
+<CodeGroup>
+
+```bash Forward the same port
+# Binds 127.0.0.1:5432 -> my-app/db:5432
+caractrl port-forward my-app/db 5432
+```
+
+```bash Forward to a different local port
+# Binds 127.0.0.1:15432 -> my-app/db:5432
+caractrl port-forward my-app/db 15432:5432
+```
+
+```bash Specify the agent address explicitly
+# Bypasses auto-resolution; connects directly to the agent at 192.168.1.100:9090
+caractrl port-forward my-app/db 5432 --node 192.168.1.100:9090
+```
+
+</CodeGroup>
+
+Once the tunnel is up, `caractrl` prints a confirmation line to stderr:
+
+```
+Forwarding 127.0.0.1:5432 -> my-app/db:5432
+```
+
+Connect with any tool that speaks the protocol:
+
+```bash
+psql -h 127.0.0.1 -p 5432 -U postgres
+```
+
+Press **Ctrl+C** to stop forwarding. `caractrl` closes the local listener and waits for any in-flight connections to drain before exiting.
+
+## Agent auto-resolution
+
+When you omit `--node`, `caractrl` resolves the agent address automatically:
+
+1. It fetches the project from the control plane and reads `status.nodeRef`.
+2. It fetches that node and reads `status.network.ip` and `status.network.agentPort`.
+3. It constructs the agent address as `<ip>:<agentPort>`.
+
+If the node record has no `agentPort` set, `caractrl` falls back to port `9090` and prints a warning.
+
+## Manual address override
+
+Use `--node host:port` to bypass auto-resolution entirely. This is useful when:
+
+- The project has no `nodeRef` yet (still `Pending` or `Scheduled`).
+- The node's reported IP is not the address reachable from your machine (e.g., behind NAT).
+- You want to connect to a specific agent for testing.
+
+```bash
+caractrl port-forward my-app/db 5432 --node 192.168.1.100:9090
+```
+
+## How the tunnel works
+
+Each accepted TCP connection opens a new WebSocket connection to the agent's forward endpoint:
+
+<Note>
+  The agent exposes the forwarding WebSocket at:
+
+  ```
+  ws://<agent-host>:<agent-port>/api/v1/forward/{project}/{service}/{port}
+  ```
+
+  Data flows bidirectionally: bytes from the local TCP socket are sent as binary WebSocket frames to the agent, and frames from the agent are written back to the TCP socket.
+</Note>
+
+The agent looks up the running container for `{project}/{service}`, connects to `localhost:{port}` inside the container's network namespace, and proxies the stream.
+
+## Limitations
+
+- **Running projects only.** The project must be in `Running` phase. If it is still `Pending` or `Scheduled`, the agent has no container to connect to and the WebSocket dial fails.
+- **Agent reachability.** Your machine must be able to reach the agent directly. If the node is behind a firewall or NAT that blocks the agent port, use a jump host or VPN, or expose the port explicitly.
+- **Single-connection restart.** Each new TCP connection to the local port opens a fresh WebSocket to the agent. There is no persistent session; reconnecting your tool automatically opens a new tunnel.
