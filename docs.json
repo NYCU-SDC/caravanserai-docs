@@ -3,10 +3,10 @@
   "theme": "aspen",
   "name": "Caravanserai",
   "logo": {
-    "light": "https://media.brand.dev/bc507d97-b3a9-43f4-8318-424c1322e75a.png",
-    "dark": "https://media.brand.dev/bc507d97-b3a9-43f4-8318-424c1322e75a.png"
+    "light": "",
+    "dark": ""
   },
-  "favicon": "https://media.brand.dev/03f699e4-d5fa-404d-b358-286beecb6f2d.png",
+  "favicon": "",
   "colors": {
     "primary": "#7c7c7c",
     "light": "#0e0e0e",
